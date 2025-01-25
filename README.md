@@ -29,9 +29,15 @@ Android Stable Diffusion with Snapdragon NPU acceleration. Also supports CPU inf
 
 ### NPU Acceleration Support
 
+- Devices with Snapdragon 8 Gen 1
+- Devices with Snapdragon 8+Gen 1
 - Devices with Snapdragon 8 Gen 2
 - Devices with Snapdragon 8 Gen 3
 - Devices with Snapdragon 8 Gen 4
+
+### Possibly Support (Not verified)
+
+- Snapdragon 6gen1 8sgen3 7+gen3 7gen1 7+gen2
 
 ### CPU Support
 
