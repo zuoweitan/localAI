@@ -35,6 +35,8 @@ Android Stable Diffusion with Snapdragon NPU acceleration. Also supports CPU inf
 - Devices with Snapdragon 8 Gen 3
 - Devices with Snapdragon 8 Gen 4
 
+Note: Different phones have different default frequency limits for their NPUs, and the same chip from different manufacturers may have varying inference speeds.
+
 ### Possibly Support (Not verified)
 
 - Snapdragon 6gen1 8sgen3 7+gen3 7gen1 7+gen2
