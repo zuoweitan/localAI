@@ -4,6 +4,10 @@ Android Stable Diffusion with Snapdragon NPU acceleration. Also supports CPU inf
 
 ![](./assets/demo.jpg)
 
+## About this Repo
+
+This project is currently closed-source and this repository is only used for releasing binaries and discussing issues for now.
+
 ## Usage
 
 - Download the APK from the [Releases](https://github.com/xororz/local-dream/releases) page
