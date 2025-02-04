@@ -6,7 +6,9 @@ Android Stable Diffusion with Snapdragon NPU acceleration. Also supports CPU inf
 
 ## About this Repo
 
-This project is currently closed-source and this repository is only used for releasing binaries and discussing issues for now.
+This project is **currently closed-source** and this repository is only used for releasing binaries and discussing issues for now.
+
+This project is **completely free**. Hope you enjoy it!
 
 ## Usage
 
@@ -57,7 +59,13 @@ Note: Different phones have different default frequency limits for their NPUs, a
    - Specialized for anime/manga style image generation
 
 2. Stable Diffusion 2.1
+
    - General-purpose image generation
+
+3. Pony V5.5
+   - Pony Diffusion series
+
+Currently CPU version only provides Anything V5.0 model since it works fine at low resolutions.
 
 ## Seed Settings
 
