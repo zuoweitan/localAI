@@ -41,11 +41,9 @@ This project is **completely free**. Hope you enjoy it!
 - Devices with Snapdragon 8 Gen 3
 - Devices with Snapdragon 8 Gen 4
 
+Other devices are not able to download the npu models.
+
 Note: Different phones have different default frequency limits for their NPUs, and the same chip from different manufacturers may have varying inference speeds.
-
-### Possibly Support (Not verified)
-
-- Snapdragon 6gen1 8sgen3 7+gen3 7gen1 7+gen2
 
 ### CPU Support
 
