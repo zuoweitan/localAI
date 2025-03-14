@@ -10,9 +10,13 @@ This project is **currently closed-source** and this repository is only used for
 
 This project is **completely free**. Hope you enjoy it!
 
+**Will be open sourced later after organizing my code!**
+
+If you like it, please consider [sponsor](https://github.com/xororz/local-dream?tab=readme-ov-file#sponsorship) this project.
+
 ## Usage
 
-- Download the APK from the [Releases](https://github.com/xororz/local-dream/releases) page
+- Download the APK from the [Releases](https://github.com/xororz/local-dream/releases) page or [Google Play](https://play.google.com/store/apps/details?id=io.github.xororz.localdream).
 - Open the app and download the model(s) you want to use
 
 ## Technical Implementation
