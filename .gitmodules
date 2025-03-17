@@ -1,0 +1,21 @@
+[submodule "app/src/main/cpp/3rdparty/tokenizers-cpp"]
+	path = app/src/main/cpp/3rdparty/tokenizers-cpp
+	url = https://github.com/mlc-ai/tokenizers-cpp.git
+[submodule "app/src/main/cpp/3rdparty/cpp-httplib"]
+	path = app/src/main/cpp/3rdparty/cpp-httplib
+	url = https://github.com/yhirose/cpp-httplib.git
+[submodule "app/src/main/cpp/3rdparty/json"]
+	path = app/src/main/cpp/3rdparty/json
+	url = https://github.com/nlohmann/json.git
+[submodule "app/src/main/cpp/3rdparty/stb"]
+	path = app/src/main/cpp/3rdparty/stb
+	url = https://github.com/nothings/stb.git
+[submodule "app/src/main/cpp/3rdparty/xtensor"]
+	path = app/src/main/cpp/3rdparty/xtensor
+	url = https://github.com/xtensor-stack/xtensor.git
+[submodule "app/src/main/cpp/3rdparty/xtl"]
+	path = app/src/main/cpp/3rdparty/xtl
+	url = https://github.com/xtensor-stack/xtl.git
+[submodule "app/src/main/cpp/3rdparty/MNN"]
+	path = app/src/main/cpp/3rdparty/MNN
+	url = https://github.com/alibaba/MNN.git
