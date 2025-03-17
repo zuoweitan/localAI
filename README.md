@@ -6,11 +6,7 @@ Android Stable Diffusion with Snapdragon NPU acceleration. Also supports CPU inf
 
 ## About this Repo
 
-This project is **currently closed-source** and this repository is only used for releasing binaries and discussing issues for now.
-
-This project is **completely free**. Hope you enjoy it!
-
-**Will be open sourced later after organizing my code!**
+This project is **now open sourced and completely free**. Hope you enjoy it!
 
 If you like it, please consider [sponsor](https://github.com/xororz/local-dream?tab=readme-ov-file#sponsorship) this project.
 
@@ -18,6 +14,32 @@ If you like it, please consider [sponsor](https://github.com/xororz/local-dream?
 
 - Download the APK from the [Releases](https://github.com/xororz/local-dream/releases) page or [Google Play](https://play.google.com/store/apps/details?id=io.github.xororz.localdream).
 - Open the app and download the model(s) you want to use
+
+## Build
+
+### Clone this repo recursively
+
+```bash
+git clone --recursive https://github.com/xororz/local-dream.git
+```
+
+### Prepare SDKs
+
+1. Download [QNN_SDK_2.29](https://apigwx-aws.qualcomm.com/qsc/public/v1/api/download/software/qualcomm_neural_processing_sdk/v2.29.0.241129.zip) and extract
+2. Download [Android NDK](https://developer.android.com/ndk/downloads) and extract
+3. Modify the QNN_SDK_ROOT in app/src/main/cpp/CMakeLists.txt
+4. Modify the ANDROID_NDK_ROOT in app/src/main/cpp/CMakePresets.json
+
+### Build and prepare libraries
+
+```bash
+cd app/src/main/cpp/
+bash ./build.sh
+```
+
+### Build apk in android studio
+
+open this project in android studio and click Build/Generate App Bundles or APKs/Generate APKs
 
 ## Technical Implementation
 
