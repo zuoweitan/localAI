@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Local Dream</string>
+
+    <!-- Models -->
+    <string name="anythingv5_description">动漫图像生成模型</string>
+    <string name="sd21_description">通用图像生成模型</string>
+    <string name="ponyv55_description">Pony Diffusion系列</string>
+
+    <!-- Models -->
+    <string name="backend_notify">模型服务运行中</string>
+    <string name="backend_notify_title">SD模型后端</string>
+    <string name="generating_notify">图像生成中…</string>
+
+    <!-- Common -->
+    <string name="settings">设置</string>
+    <string name="confirm">确定</string>
+    <string name="cancel">取消</string>
+    <string name="save">保存</string>
+    <string name="back">返回</string>
+    <string name="close">关闭</string>
+    <string name="delete">删除</string>
+    <string name="delete_model">删除模型</string>
+    <string name="delete_confirm">确定要删除选中的 %s 个模型吗？此操作不可恢复</string>
+    <string name="got_it">知道了!</string>
+    <string name="about_app">须知</string>
+    <string name="must_read">此APP支持在CPU和部分高通NPU上运行stable diffusion图像生成。\n\n如您的芯片不是下列之一，则只能用CPU运行\n\n支持的NPU列表:\n- 骁龙8gen1\n- 骁龙8gen2\n- 骁龙8gen3\n- 骁龙8gen4</string>
+    <string name="help">help</string>
+
+    <!-- Model List Screen -->
+    <string name="available_models">可用模型</string>
+    <string name="selected_items">已选择 %d 项</string>
+    <string name="download_settings">下载设置</string>
+    <string name="download_from">下载地址</string>
+    <string name="download_settings_hint">设置模型下载地址\n默认为https://huggingface.co/\n国内用户可使用镜像https://hf-mirror.com/</string>
+    <string name="model_size">总大小：约%s</string>
+    <string name="downloaded">已下载</string>
+    <string name="downloading_file">正在下载第 %1$d/%2$d 个文件：%3$s</string>
+    <string name="delete_success">删除成功</string>
+    <string name="delete_failed">删除过程出错</string>
+    <string name="cannot_download">无法下载</string>
+    <string name="cannot_download_hint">当前有模型正在下载，请等待下载完成后再尝试</string>
+    <string name="download_model">下载模型</string>
+    <string name="download_model_hint">确定要下载 %s 吗？模型较大，建议使用WiFi网络下载。</string>
+    <string name="download_done">模型下载完成</string>
+    <string name="unsupport_npu">您的设备暂不支持，请使用CPU版本</string>
+    <string name="cpu_models">CPU Models</string>
+    <string name="npu_models">NPU Models</string>
+    <string name="no_cpu_models">暂无模型</string>
+    <string name="no_npu_models">暂无模型</string>
+
+    <!-- Run Screen -->
+    <string name="prompt_settings">提示词设置</string>
+    <string name="advanced_settings">高级设置</string>
+    <string name="advanced_settings_title">高级参数设置</string>
+    <string name="image_prompt">图像生成提示</string>
+    <string name="negative_prompt">负面提示</string>
+    <string name="generate_image">生成图像</string>
+    <string name="generating">正在生成图像…</string>
+    <string name="generation_progress">%d%%</string>
+    <string name="no_results">还没有结果哦</string>
+    <string name="no_results_hint">请先在提示词页面生成图像</string>
+    <string name="go_to_generate">去生成图像</string>
+    <string name="prompt_tab">提示词</string>
+    <string name="result_tab">生成结果</string>
+    <string name="confirm_exit">确定退出</string>
+    <string name="confirm_exit_hint">图片正在生成中，确定要退出吗？</string>
+    <string name="reset">恢复默认参数</string>
+    <string name="reset_hint">确定要将所有参数（包括提示词）恢复为默认值吗？此操作不可撤销。</string>
+
+    <!-- Parameter Settings -->
+    <string name="generation_params">生成参数</string>
+    <string name="steps">生成步数: %d</string>
+    <string name="cfg_scale">CFG Scale: %.1f</string>
+    <string name="image_size">图像尺寸: %1$dx%2$d</string>
+    <string name="random_seed">随机种子 (可选)</string>
+    <string name="use_last_seed">使用上次的种子 (%s)</string>
+    <string name="result_params">步数: %s / CFG: %.1f / 种子: %s"</string>
+    <string name="result_params_2">尺寸: %s / 耗时: %s / %s"</string>
+    <string name="params_detail">生成参数详情</string>
+    <string name="basic_params">基础参数</string>
+    <string name="basic_step">步数: %d</string>
+    <string name="basic_size">尺寸: %dx%d</string>
+    <string name="basic_seed">种子: %s</string>
+    <string name="basic_runtime">运行: %s</string>
+    <string name="basic_time">耗时: %s</string>
+
+    <!-- Error Messages -->
+    <string name="error_device_not_supported">您的设备暂不支持，请使用CPU版本</string>
+    <string name="error_download_failed">下载失败: %s</string>
+    <string name="error_request_failed">请求失败: %s</string>
+    <string name="error_generation_failed">生成失败: %s</string>
+    <string name="unknown_error">未知错误</string>
+
+    <!-- Info Messages -->
+    <string name="image_saved">图片已保存到相册</string>
+    <string name="loading_model">模型加载中…</string>
+</resources>

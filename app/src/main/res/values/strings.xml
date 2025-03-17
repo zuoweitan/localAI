@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Local Dream</string>
+
+    <!-- Models -->
+    <string name="anythingv5_description">Anime Image Generation</string>
+    <string name="sd21_description">General Image Generation</string>
+    <string name="ponyv55_description">Pony Diffusion Series</string>
+
+    <!-- Models -->
+    <string name="backend_notify">Model Backend Service Running</string>
+    <string name="backend_notify_title">SD Model Backend</string>
+    <string name="generating_notify">Image Generating…</string>
+
+    <!-- Common -->
+    <string name="settings">Settings</string>
+    <string name="confirm">Confirm</string>
+    <string name="cancel">Cancel</string>
+    <string name="save">Save</string>
+    <string name="back">Back</string>
+    <string name="close">Close</string>
+    <string name="delete">Delete</string>
+    <string name="delete_model">Delete Model</string>
+    <string name="delete_confirm">Delete selected %s models? This action cannot be undone.</string>
+    <string name="got_it">Got It!</string>
+    <string name="about_app">Note</string>
+    <string name="must_read">This APP supports running stable diffusion image generation on CPU and some Qualcomm NPUs.\n\nIf your chip is not one of the following, you can only run it on CPU\n\nSupported NPU list:\n- Snapdragon 8 Gen 1\n- Snapdragon 8 Gen 2\n- Snapdragon 8 Gen 3\n- Snapdragon 8 Gen 4</string>
+    <string name="help">help</string>
+
+    <!-- Model List Screen -->
+    <string name="available_models">Available Models</string>
+    <string name="selected_items">%d Selected</string>
+    <string name="download_settings">Download Settings</string>
+    <string name="download_from">Download From</string>
+    <string name="download_settings_hint">Download from huggingface or other mirror url</string>
+    <string name="model_size">Total Size: ~%s</string>
+    <string name="downloaded">Downloaded</string>
+    <string name="downloading_file">Downloading file %1$d/%2$d: %3$s</string>
+    <string name="delete_success">Deleted</string>
+    <string name="delete_failed">Error in deletion</string>
+    <string name="cannot_download">Cannot Download</string>
+    <string name="cannot_download_hint">A model is being downloaded, please wait.</string>
+    <string name="download_model">Download Model</string>
+    <string name="download_model_hint">Are you sure to download %s ?</string>
+    <string name="download_done">Download Finished</string>
+    <string name="unsupport_npu">Your device is not supported. Try the CPU model please.</string>
+    <string name="cpu_models">CPU Models</string>
+    <string name="npu_models">NPU Models</string>
+    <string name="no_cpu_models">No Models</string>
+    <string name="no_npu_models">No Models</string>
+
+    <!-- Run Screen -->
+    <string name="prompt_settings">Prompts</string>
+    <string name="advanced_settings">Advanced</string>
+    <string name="advanced_settings_title">Advanced Settings</string>
+    <string name="image_prompt">Image Generation Prompt</string>
+    <string name="negative_prompt">Negative Prompt</string>
+    <string name="generate_image">Generate</string>
+    <string name="generating">Generating image…</string>
+    <string name="generation_progress">%d%%</string>
+    <string name="no_results">No results yet</string>
+    <string name="no_results_hint">Create an image first~</string>
+    <string name="go_to_generate">Create</string>
+    <string name="prompt_tab">Prompt</string>
+    <string name="result_tab">Result</string>
+    <string name="confirm_exit">Confirm to Exit</string>
+    <string name="confirm_exit_hint">Generation in progress, Are you sure to Exit?</string>
+    <string name="reset">Reset</string>
+    <string name="reset_hint">Reset all parameters? This action cannot be undone. </string>
+
+    <!-- Parameter Settings -->
+    <string name="generation_params">Generation Params</string>
+    <string name="steps">Steps: %d</string>
+    <string name="cfg_scale">CFG Scale: %.1f</string>
+    <string name="image_size">Image Size: %1$dx%2$d</string>
+    <string name="random_seed">Random Seed (Optional)</string>
+    <string name="use_last_seed">Use Last Seed (%s)</string>
+    <string name="result_params">steps: %s / CFG: %.1f / seed: %s"</string>
+    <string name="result_params_2">size: %s / time: %s / %s"</string>
+    <string name="params_detail">Details</string>
+    <string name="basic_params">Basic</string>
+    <string name="basic_step">Steps: %d</string>
+    <string name="basic_size">Size: %dx%d</string>
+    <string name="basic_seed">Seed: %s</string>
+    <string name="basic_runtime">Runtime: %s</string>
+    <string name="basic_time">Time: %s</string>
+
+    <!-- Error Messages -->
+    <string name="error_device_not_supported">Your device is not supported yet, please use CPU version</string>
+    <string name="error_download_failed">Download failed: %s</string>
+    <string name="error_request_failed">Request failed: %s</string>
+    <string name="error_generation_failed">Generation failed: %s</string>
+    <string name="unknown_error">unknown error</string>
+
+    <!-- Info Messages -->
+    <string name="image_saved">Image saved to gallery</string>
+    <string name="loading_model">Loading model…</string>
+</resources>
