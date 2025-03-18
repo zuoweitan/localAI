@@ -17,6 +17,10 @@ If you like it, please consider [sponsor](https://github.com/xororz/local-dream?
 
 ## Build
 
+It is recommended to build it on linux/wsl. Other platforms are not verified.
+
+**Rust is needed for building tokenizer-cpp. You should first install rustup, then "rustup default stable".**
+
 ### Clone this repo recursively
 
 ```bash
