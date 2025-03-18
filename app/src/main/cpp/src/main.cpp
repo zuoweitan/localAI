@@ -1130,18 +1130,23 @@ int main(int argc, char **argv)
     return EXIT_FAILURE;
   }
 
-  MNN::ScheduleConfig config;
-  config.type = MNN_FORWARD_CPU;
-  config.numThread = 4;
+  MNN::ScheduleConfig config_1;
+  config_1.type = MNN_FORWARD_CPU;
+  config_1.numThread = 4;
   MNN::BackendConfig backendConfig;
   // backendConfig.precision = MNN::BackendConfig::Precision_Low;
   backendConfig.memory = MNN::BackendConfig::Memory_Low;
-  config.backendConfig = &backendConfig;
-  auto runtimeinfo = MNN::Interpreter::createRuntime({config});
+  backendConfig.power= MNN::BackendConfig::Power_High;
+  config_1.backendConfig = &backendConfig;
+
+  MNN::ScheduleConfig config_2;
+  config_2.type = MNN_FORWARD_CPU;
+  config_2.numThread = 1;
+  config_2.backendConfig = &backendConfig;
 
   if (use_safety_checker)
   {
-    safetyCheckerSession = safetyCheckerApp->createSession(config, runtimeinfo);
+    safetyCheckerSession = safetyCheckerApp->createSession(config_2);
   }
 
   if (use_mnn)
@@ -1155,9 +1160,9 @@ int main(int argc, char **argv)
       return EXIT_FAILURE;
     }
 
-    clipSession = clipApp->createSession(config, runtimeinfo);
-    unetSession = unetApp->createSession(config);
-    vaeDecoderSession = vaeDecoderApp->createSession(config, runtimeinfo);
+    clipSession = clipApp->createSession(config_2);
+    unetSession = unetApp->createSession(config_1);
+    vaeDecoderSession = vaeDecoderApp->createSession(config_2);
     httplib::Server svr;
 
     svr.Get("/health", [](const httplib::Request &req, httplib::Response &res)
@@ -1310,7 +1315,7 @@ int main(int argc, char **argv)
 
   if (use_mnn_clip)
   {
-    clipSession = clipAppMNN->createSession(config, runtimeinfo);
+    clipSession = clipAppMNN->createSession(config_1);
   }
   else
   {
