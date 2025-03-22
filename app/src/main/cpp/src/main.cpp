@@ -451,7 +451,7 @@ namespace qnn
 
 std::vector<int> EncodeText(const std::string &text, int bos, int pad, int max_length)
 {
-  int ponyv55_pad = 0;
+  int sd21_pad = 0;
   std::vector<int> ids = g_tokenizer->Encode(text);
   ids.insert(ids.begin(), bos);
   if (ids.size() > max_length - 1)
@@ -462,9 +462,9 @@ std::vector<int> EncodeText(const std::string &text, int bos, int pad, int max_l
   ids.push_back(pad);
   for (int i = 0; i < pad_length - 1; i++)
   {
-    if (ponyv55)
+    if (text_embedding_size == 1024)
     {
-      ids.push_back(ponyv55_pad);
+      ids.push_back(sd21_pad);
     }
     else
     {
@@ -1136,7 +1136,7 @@ int main(int argc, char **argv)
   MNN::BackendConfig backendConfig;
   // backendConfig.precision = MNN::BackendConfig::Precision_Low;
   backendConfig.memory = MNN::BackendConfig::Memory_Low;
-  backendConfig.power= MNN::BackendConfig::Power_High;
+  backendConfig.power = MNN::BackendConfig::Power_High;
   config_1.backendConfig = &backendConfig;
 
   MNN::ScheduleConfig config_2;
