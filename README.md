@@ -35,6 +35,7 @@ git clone --recursive https://github.com/xororz/local-dream.git
 4. Modify the ANDROID_NDK_ROOT in app/src/main/cpp/CMakePresets.json
 
 ### Build and prepare libraries
+
 #### Linux
 
 ```bash
@@ -113,8 +114,6 @@ Note: Different phones have different default frequency limits for their NPUs, a
 
 5. Absolute Reality
    - Realistic image generation
-
-Currently CPU version only provides Anything V5.0 model since it works fine at low resolutions.
 
 ## Seed Settings
 
