@@ -104,7 +104,15 @@ Note: Different phones have different default frequency limits for their NPUs, a
    - General-purpose image generation
 
 3. Pony V5.5
+
    - Pony Diffusion series
+
+4. ChilloutMix
+
+   - ChilloutMix series
+
+5. Absolute Reality
+   - Realistic image generation
 
 Currently CPU version only provides Anything V5.0 model since it works fine at low resolutions.
 
