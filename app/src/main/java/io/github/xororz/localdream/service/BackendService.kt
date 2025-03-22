@@ -202,7 +202,7 @@ class BackendService : Service() {
             }
 
             var clipfilename = "clip.bin"
-            if (model.id == "anythingv5") {
+            if (model.useCpuClip) {
                 clipfilename = "clip.mnn"
             }
             var command = listOf(
@@ -219,7 +219,7 @@ class BackendService : Service() {
             if (model.id.startsWith("pony")) {
                 command += "--ponyv55"
             }
-            if (model.id == "anythingv5") {
+            if (model.useCpuClip) {
                 command += "--use_cpu_clip"
             }
             if (model.runOnCpu) {

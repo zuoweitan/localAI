@@ -68,6 +68,7 @@ data class Model(
     val defaultPrompt: String = "",
     val defaultNegativePrompt: String = "",
     val runOnCpu: Boolean = false,
+    val useCpuClip: Boolean = false
 ) {
     fun download(context: Context): Flow<DownloadResult> = flow {
         val modelsDir = getModelsDir(context)
@@ -179,12 +180,20 @@ class ModelRepository(private val context: Context) {
             return listOf(
                 createAnythingV5Model(),
                 createAnythingV5ModelCPU(),
+                createChilloutMixModelCPU(),
+                createChilloutMixModel(),
+                createAbsoluteRealityModel(),
+                createAbsoluteRealityModelCPU(),
                 createSD21Model(),
             )
         }
         return listOf(
             createAnythingV5Model(),
             createAnythingV5ModelCPU(),
+            createChilloutMixModelCPU(),
+            createChilloutMixModel(),
+            createAbsoluteRealityModel(),
+            createAbsoluteRealityModelCPU(),
             createPonyV55Model(),
             createSD21Model(),
         )
@@ -232,7 +241,8 @@ class ModelRepository(private val context: Context) {
                 )
             ),
             defaultPrompt = "masterpiece, best quality, 1girl, solo, cute, white hair,",
-            defaultNegativePrompt = "bad anatomy, bad hands, missing fingers, extra fingers, bad arms, missing legs, missing arms, poorly drawn face, bad face, fused face, cloned face, three crus, fused feet, fused thigh, extra crus, ugly fingers, horn, realistic photo, huge eyes, worst face, 2girl, long fingers, disconnected limbs,"
+            defaultNegativePrompt = "badhandv4, easynegative, bad anatomy, bad hands, missing fingers, extra fingers, bad arms, missing legs, missing arms, poorly drawn face, bad face, fused face, cloned face, three crus, fused feet, fused thigh, extra crus, ugly fingers, horn, realistic photo, huge eyes, worst face, 2girl, long fingers, disconnected limbs,",
+            useCpuClip = true
         )
     }
 
@@ -273,11 +283,179 @@ class ModelRepository(private val context: Context) {
                 )
             ),
             defaultPrompt = "masterpiece, best quality, 1girl, solo, cute, white hair,",
-            defaultNegativePrompt = "bad anatomy, bad hands, missing fingers, extra fingers, bad arms, missing legs, missing arms, poorly drawn face, bad face, fused face, cloned face, three crus, fused feet, fused thigh, extra crus, ugly fingers, horn, realistic photo, huge eyes, worst face, 2girl, long fingers, disconnected limbs,",
+            defaultNegativePrompt = "badhandv4, easynegative, bad anatomy, bad hands, missing fingers, extra fingers, bad arms, missing legs, missing arms, poorly drawn face, bad face, fused face, cloned face, three crus, fused feet, fused thigh, extra crus, ugly fingers, horn, realistic photo, huge eyes, worst face, 2girl, long fingers, disconnected limbs,",
             runOnCpu = true
         )
     }
 
+    private fun createAbsoluteRealityModel(): Model {
+        val id = "absolutereality"
+        val soc = getDeviceSoc()
+        return Model(
+            id = id,
+            name = "Absolute Reality",
+            description = context.getString(R.string.absolutereality_description),
+            baseUrl = baseUrl,
+            files = listOf(
+                ModelFile(
+                    "tokenizer.json",
+                    "tokenizer",
+                    "xororz/AbsoluteReality/resolve/main/tokenizer.json"
+                ),
+                ModelFile("clip.mnn", "clip", "xororz/AbsoluteReality/resolve/main/clip_fp16.mnn"),
+                ModelFile(
+                    "vae_decoder.bin",
+                    "vae_decoder",
+                    "xororz/AbsoluteReality/resolve/main/vae_decoder_${chipsetModelSuffixes[soc]}.bin"
+                ),
+                ModelFile(
+                    "unet.bin",
+                    "unet",
+                    "xororz/AbsoluteReality/resolve/main/unet_${chipsetModelSuffixes[soc]}.bin"
+                )
+            ),
+            approximateSize = "1.1GB",
+            isDownloaded = Model.checkModelExists(
+                context,
+                id,
+                listOf(
+                    ModelFile("tokenizer.json", "", ""),
+                    ModelFile("clip.mnn", "", ""),
+                    ModelFile("vae_decoder.bin", "", ""),
+                    ModelFile("unet.bin", "", "")
+                )
+            ),
+            defaultPrompt = "best quality, realistic, a cat on grass,",
+            defaultNegativePrompt = "worst quality, low quality, normal quality, lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry, artist name",
+            runOnCpu = false,
+            useCpuClip = true
+        )
+    }
+    private fun createAbsoluteRealityModelCPU(): Model {
+        val id = "absoluterealitycpu"
+        return Model(
+            id = id,
+            name = "Absolute Reality",
+            description = context.getString(R.string.absolutereality_description),
+            baseUrl = baseUrl,
+            files = listOf(
+                ModelFile(
+                    "tokenizer.json",
+                    "tokenizer",
+                    "xororz/AbsoluteReality/resolve/main/tokenizer.json"
+                ),
+                ModelFile("clip.mnn", "clip", "xororz/AbsoluteReality/resolve/main/clip_fp16.mnn"),
+                ModelFile(
+                    "vae_decoder.mnn",
+                    "vae_decoder",
+                    "xororz/AbsoluteReality/resolve/main/vae_decoder_fp16.mnn"
+                ),
+                ModelFile(
+                    "unet.mnn",
+                    "unet",
+                    "xororz/AbsoluteReality/resolve/main/unet_asym_block32.mnn"
+                )
+            ),
+            approximateSize = "1.2GB",
+            isDownloaded = Model.checkModelExists(
+                context,
+                id,
+                listOf(
+                    ModelFile("tokenizer.json", "", ""),
+                    ModelFile("clip.mnn", "", ""),
+                    ModelFile("vae_decoder.mnn", "", ""),
+                    ModelFile("unet.mnn", "", "")
+                )
+            ),
+            defaultPrompt = "masterpiece, best quality, ultra-detailed, realistic, 8k, a cat on grass,",
+            defaultNegativePrompt = "Realisian-Neg, BadDream, negative_hand, NegfeetV2, worst quality, low quality, normal quality, poorly drawn, lowres, low resolution, signature, watermarks, ugly, out of focus, error, blurry, unclear photo, bad photo, unrealistic, semi realistic, pixelated, cartoon, anime, cgi, drawing, 2d, 3d, censored, duplicate,",
+            runOnCpu = true
+        )
+    }
+    private fun createChilloutMixModel(): Model {
+        val id = "chilloutmix"
+        val soc = getDeviceSoc()
+        return Model(
+            id = id,
+            name = "ChilloutMix",
+            description = context.getString(R.string.chilloutmix_description),
+            baseUrl = baseUrl,
+            files = listOf(
+                ModelFile(
+                    "tokenizer.json",
+                    "tokenizer",
+                    "xororz/ChilloutMix/resolve/main/tokenizer.json"
+                ),
+                ModelFile("clip.mnn", "clip", "xororz/ChilloutMix/resolve/main/clip_fp16.mnn"),
+                ModelFile(
+                    "vae_decoder.bin",
+                    "vae_decoder",
+                    "xororz/ChilloutMix/resolve/main/vae_decoder_${chipsetModelSuffixes[soc]}.bin"
+                ),
+                ModelFile(
+                    "unet.bin",
+                    "unet",
+                    "xororz/ChilloutMix/resolve/main/unet_${chipsetModelSuffixes[soc]}.bin"
+                )
+            ),
+            approximateSize = "1.1GB",
+            isDownloaded = Model.checkModelExists(
+                context,
+                id,
+                listOf(
+                    ModelFile("tokenizer.json", "", ""),
+                    ModelFile("clip.mnn", "", ""),
+                    ModelFile("vae_decoder.bin", "", ""),
+                    ModelFile("unet.bin", "", "")
+                )
+            ),
+            defaultPrompt = "RAW photo, best quality, realistic, photo-realistic, masterpiece, extremely detailed, CG, unity, 8k wallpaper, ultra-detailed, highres, absurdres, 1girl, silver hair,",
+            defaultNegativePrompt = "paintings, sketches, worst quality, low quality, normal quality, lowres, monochrome, grayscale, skin spots, acnes, skin blemishes, age spot, bad anatomy, bad hands, bad body, bad proportions, gross proportions, extra fingers, fewer fingers, extra digit, missing fingers, fused fingers, extra arms, missing arms, extra legs, missing legs, extra limbs, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, blurry, watermark, white letters, signature, text, error, jpeg artifacts, duplicate, morbid, mutilated, cross-eyed, long neck, ng_deepnegative_v1_75t, easynegative, bad-picture-chill-75v, bad-artist",
+            runOnCpu = false,
+            useCpuClip = true,
+        )
+    }
+    private fun createChilloutMixModelCPU(): Model {
+        val id = "chilloutmixcpu"
+        return Model(
+            id = id,
+            name = "ChilloutMix",
+            description = context.getString(R.string.chilloutmix_description),
+            baseUrl = baseUrl,
+            files = listOf(
+                ModelFile(
+                    "tokenizer.json",
+                    "tokenizer",
+                    "xororz/ChilloutMix/resolve/main/tokenizer.json"
+                ),
+                ModelFile("clip.mnn", "clip", "xororz/ChilloutMix/resolve/main/clip_fp16.mnn"),
+                ModelFile(
+                    "vae_decoder.mnn",
+                    "vae_decoder",
+                    "xororz/ChilloutMix/resolve/main/vae_decoder_fp16.mnn"
+                ),
+                ModelFile(
+                    "unet.mnn",
+                    "unet",
+                    "xororz/ChilloutMix/resolve/main/unet_asym_block32.mnn"
+                )
+            ),
+            approximateSize = "1.2GB",
+            isDownloaded = Model.checkModelExists(
+                context,
+                id,
+                listOf(
+                    ModelFile("tokenizer.json", "", ""),
+                    ModelFile("clip.mnn", "", ""),
+                    ModelFile("vae_decoder.mnn", "", ""),
+                    ModelFile("unet.mnn", "", "")
+                )
+            ),
+            defaultPrompt = "RAW photo, best quality, realistic, photo-realistic, masterpiece, extremely detailed, CG, unity, 8k wallpaper, ultra-detailed, highres, absurdres, 1girl, silver hair,",
+            defaultNegativePrompt = "paintings, sketches, worst quality, low quality, normal quality, lowres, monochrome, grayscale, skin spots, acnes, skin blemishes, age spot, bad anatomy, bad hands, bad body, bad proportions, gross proportions, extra fingers, fewer fingers, extra digit, missing fingers, fused fingers, extra arms, missing arms, extra legs, missing legs, extra limbs, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, blurry, watermark, white letters, signature, text, error, jpeg artifacts, duplicate, morbid, mutilated, cross-eyed, long neck, ng_deepnegative_v1_75t, easynegative, bad-picture-chill-75v, bad-artist",
+            runOnCpu = true
+        )
+    }
     private fun createSD21Model(): Model {
         val id = "sd21"
         val soc = getDeviceSoc()

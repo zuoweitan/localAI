@@ -4,6 +4,8 @@
 
     <!-- Models -->
     <string name="anythingv5_description">动漫图像生成模型</string>
+    <string name="chilloutmix_description">人物图像生成模型</string>
+    <string name="absolutereality_description">现实场景生成模型</string>
     <string name="sd21_description">通用图像生成模型</string>
     <string name="ponyv55_description">Pony Diffusion系列</string>
 
