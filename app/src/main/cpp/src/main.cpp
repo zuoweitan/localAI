@@ -29,6 +29,7 @@ bool ponyv55 = false;
 static void *sg_backendHandle_clip{nullptr};
 static void *sg_backendHandle_unet{nullptr};
 static void *sg_backendHandle_vae_decoder{nullptr};
+static void *sg_backendHandle_vae_encoder{nullptr};
 static void *sg_modelHandle{nullptr};
 
 std::shared_ptr<tokenizers::Tokenizer> g_tokenizer;
@@ -42,6 +43,7 @@ MNN::Session *safetyCheckerSession;
 bool use_mnn = false;
 bool use_safety_checker = false;
 bool use_mnn_clip = false;
+bool img2img = false;
 float nsfw_threshold = 0.5f;
 namespace qnn
 {
@@ -129,6 +131,7 @@ namespace qnn
         std::unique_ptr<QnnModel> clip;
         std::unique_ptr<QnnModel> unet;
         std::unique_ptr<QnnModel> vae_decoder;
+        std::unique_ptr<QnnModel> vae_encoder;
         MNN::Interpreter *clip_mnn;
         MNN::Interpreter *unet_mnn;
         MNN::Interpreter *vae_decoder_mnn;
@@ -139,6 +142,7 @@ namespace qnn
                                    bool &loadFromCachedBinary,
                                    std::string &clipPath,
                                    std::string &unetPath,
+                                   std::string &vaeEncoderPath,
                                    std::string &vaeDecoderPath,
                                    std::string &safetyCheckerPath,
                                    std::string &tokenizerPath)
@@ -155,6 +159,7 @@ namespace qnn
             OPT_PONYV55 = 26,
             OPT_SAFETY_CHECKER = 27,
             OPT_USE_MNN_CLIP = 28,
+            OPT_IMG2IMG = 29,
             OPT_BACKEND = 3,
             OPT_INPUT_LIST = 4,
             OPT_OUTPUT_DIR = 5,
@@ -179,6 +184,7 @@ namespace qnn
               {"ponyv55", pal::no_argument, NULL, OPT_PONYV55},
               {"safety_checker", pal::required_argument, NULL, OPT_SAFETY_CHECKER},
               {"use_cpu_clip", pal::no_argument, NULL, OPT_USE_MNN_CLIP},
+              {"vae_encoder", pal::required_argument, NULL, OPT_IMG2IMG},
               {"tokenizer", pal::required_argument, NULL, OPT_TOKENIZER},
               {"clip", pal::required_argument, NULL, OPT_CLIP},
               {"unet", pal::required_argument, NULL, OPT_UNET},
@@ -253,6 +259,10 @@ namespace qnn
               break;
             case OPT_USE_MNN_CLIP:
               use_mnn_clip = true;
+              break;
+            case OPT_IMG2IMG:
+              img2img = true;
+              vaeEncoderPath = pal::g_optArg;
               break;
             case OPT_DEBUG_OUTPUTS:
               debug = true;
@@ -350,7 +360,7 @@ namespace qnn
             showHelpAndExit("Missing option: --backend");
           }
 
-          QnnFunctionPointers qnnFunctionPointers_clip, qnnFunctionPointers_unet, qnnFunctionPointers_vae_decoder;
+          QnnFunctionPointers qnnFunctionPointers_clip, qnnFunctionPointers_unet, qnnFunctionPointers_vae_decoder, qnnFunctionPointers_vae_encoder;
 
           // CLIP
           auto status = dynamicloadutil::getQnnFunctionPointers(
@@ -379,6 +389,18 @@ namespace qnn
             showHelpAndExit("Failed to get VAE Decoder QNN function pointers.");
           }
 
+          if (img2img)
+          {
+            // VAE Encoder
+            status = dynamicloadutil::getQnnFunctionPointers(
+                backEndPath, vaeEncoderPath, &qnnFunctionPointers_vae_encoder,
+                &sg_backendHandle_vae_encoder, false, &sg_modelHandle);
+            if (dynamicloadutil::StatusCode::SUCCESS != status)
+            {
+              showHelpAndExit("Failed to get VAE Encoder QNN function pointers.");
+            }
+          }
+
           if (!systemLibraryPath.empty())
           {
             for (auto *functionPointers : {&qnnFunctionPointers_clip, &qnnFunctionPointers_unet, &qnnFunctionPointers_vae_decoder})
@@ -388,6 +410,15 @@ namespace qnn
               if (dynamicloadutil::StatusCode::SUCCESS != status)
               {
                 showHelpAndExit("Failed to get QNN system function pointers.");
+              }
+            }
+            if (img2img)
+            {
+              status = dynamicloadutil::getQnnSystemFunctionPointers(
+                  systemLibraryPath, &qnnFunctionPointers_vae_encoder);
+              if (dynamicloadutil::StatusCode::SUCCESS != status)
+              {
+                showHelpAndExit("Failed to get VAE Encoder system function pointers.");
               }
             }
           }
@@ -440,7 +471,22 @@ namespace qnn
               true,
               vaeDecoderPath,
               saveBinaryName);
-
+          if (img2img)
+          {
+            apps.vae_encoder = std::make_unique<QnnModel>(
+                qnnFunctionPointers_vae_encoder,
+                inputListPaths,
+                opPackagePaths,
+                sg_backendHandle_vae_encoder,
+                outputPath,
+                debug,
+                parsedOutputDataType,
+                parsedInputDataType,
+                parsedProfilingLevel,
+                true,
+                vaeEncoderPath,
+                saveBinaryName);
+          }
           return apps;
         }
 
@@ -687,9 +733,12 @@ GenerationResult generateImageClipCPU(
     float cfg,
     bool use_cfg,
     unsigned seed,
+    std::vector<float> img_data,
+    float denoise_strength,
     MNN::Interpreter *clipInterpreter,
     QnnModel *unetApp,
     QnnModel *vaeDecoderApp,
+    QnnModel *vaeEncoderApp,
     MNN::Interpreter *safetyCheckerInterpreter,
     std::function<void(int step, int total_steps)> progress_callback)
 {
@@ -701,6 +750,10 @@ GenerationResult generateImageClipCPU(
   if (!clipInterpreter || !unetApp || !vaeDecoderApp)
   {
     throw std::runtime_error("Models not initialized");
+  }
+  if (img2img && !vaeEncoderApp)
+  {
+    throw std::runtime_error("VAE Encoder model not initialized");
   }
   if (prompt.empty())
   {
@@ -780,13 +833,49 @@ GenerationResult generateImageClipCPU(
     xt::random::seed(seed);
     xt::xarray<float> latents = xt::random::randn<float>(shape);
 
-    for (int i = 0; i < timesteps.size(); i++)
+    int start_step = 0;
+    if (img2img)
     {
+      Picture vae_encoder_input;
+      vae_encoder_input.pixel_values.resize(1 * 3 * output_size * output_size);
+      memcpy(vae_encoder_input.pixel_values.data(), img_data.data(), 3 * output_size * output_size * sizeof(float));
+      VaeEncoderOutput vae_encoder_output;
+      vae_encoder_output.mean.resize(1 * 4 * sample_size * sample_size);
+      vae_encoder_output.std.resize(1 * 4 * sample_size * sample_size);
+      auto start = std::chrono::high_resolution_clock::now();
+      if (StatusCode::SUCCESS != vaeEncoderApp->executeVaeEncoderGraphs(vae_encoder_input, vae_encoder_output))
+      {
+        throw std::runtime_error("VAE encoder execution failed");
+      }
+      auto end = std::chrono::high_resolution_clock::now();
+      auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+      std::cout << "VAE encoder runSession duration: " << duration.count() << "ms" << std::endl;
+      auto mean = xt::adapt(vae_encoder_output.mean, {1, 4, sample_size, sample_size});
+      auto std = xt::adapt(vae_encoder_output.std, {1, 4, sample_size, sample_size});
+      std::cout << "mean: " << mean << std::endl;
+      std::cout << "std: " << std << std::endl;
+      xt::xarray<float> noise_0 = xt::random::randn<float>(shape);
+      xt::xarray<float> img_latent_xt = xt::eval(mean + std * noise_0);
+      xt::xarray<float> img_latent_scaled = xt::eval(0.18215 * img_latent_xt);
+
+      start_step = (int)(steps * (1 - denoise_strength));
+
+      total_run_steps -= start_step;
+      scheduler.set_begin_index(start_step);
+      std::vector<int> t = {(int)(timesteps[start_step])};
+      xt::xarray<int> x_xt = xt::adapt(t, {1});
+      latents = xt::random::randn<float>(shape);
+      latents = scheduler.add_noise(img_latent_scaled, latents, x_xt);
+    }
+
+    for (int i = start_step; i < timesteps.size(); i++)
+    {
+      auto start = std::chrono::high_resolution_clock::now();
       xt::xarray<float> latents_input = xt::concatenate(xt::xtuple(latents, latents));
       unet_input.latents = std::vector<float>(latents_input.begin(), latents_input.end());
       unet_input.timestep = timesteps[i];
 
-      if (i == 0)
+      if (i == start_step)
       {
         auto step_start = std::chrono::high_resolution_clock::now();
         if (StatusCode::SUCCESS != unetApp->executeUnetGraphsFirst(unet_input, unet_output, inputs, outputs, use_cfg))
@@ -803,6 +892,9 @@ GenerationResult generateImageClipCPU(
           throw std::runtime_error("UNET step execution failed");
         }
       }
+      auto end = std::chrono::high_resolution_clock::now();
+      auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+      std::cout << "UNET runSession duration: " << duration.count() << "ms" << std::endl;
 
       xt::xarray<float> noise_pred;
       if (use_cfg)
@@ -820,12 +912,18 @@ GenerationResult generateImageClipCPU(
       }
 
       latents = scheduler.step(noise_pred, timesteps[i], latents).prev_sample;
+      auto end2 = std::chrono::high_resolution_clock::now();
+      auto duration2 = std::chrono::duration_cast<std::chrono::milliseconds>(end2 - end).count();
+      std::cout << "Scheduler step duration: " << duration2 << "ms" << std::endl;
 
       current_step++;
       if (progress_callback)
       {
         progress_callback(current_step, total_run_steps);
       }
+      auto end3 = std::chrono::high_resolution_clock::now();
+      auto duration3 = std::chrono::duration_cast<std::chrono::milliseconds>(end3 - end2).count();
+      std::cout << "callback duration: " << duration3 << "ms" << std::endl;
     }
 
     latents = xt::eval((1 / 0.18215) * latents);
@@ -1107,10 +1205,10 @@ int main(int argc, char **argv)
   }
 
   bool loadFromCachedBinary{true};
-  std::string clipPath, unetPath, vaeDecoderPath, safetyCheckerPath;
+  std::string clipPath, unetPath, vaeDecoderPath, vaeEncoderPath, safetyCheckerPath;
   std::string tokenizerPath;
 
-  auto res = sample_app::processCommandLine(argc, argv, loadFromCachedBinary, clipPath, unetPath, vaeDecoderPath, safetyCheckerPath, tokenizerPath);
+  auto res = sample_app::processCommandLine(argc, argv, loadFromCachedBinary, clipPath, unetPath, vaeDecoderPath, vaeEncoderPath, safetyCheckerPath, tokenizerPath);
 
   try
   {
@@ -1312,6 +1410,7 @@ int main(int argc, char **argv)
   }
   auto unetApp = std::move(res.unet);
   auto vaeDecoderApp = std::move(res.vae_decoder);
+  auto vaeEncoderApp = std::move(res.vae_encoder);
 
   if (use_mnn_clip)
   {
@@ -1337,12 +1436,20 @@ int main(int argc, char **argv)
   {
     return status;
   }
+  if (img2img)
+  {
+    status = initializeQnnApp(vaeEncoderPath, vaeEncoderApp, loadFromCachedBinary, "Encoder");
+    if (status != EXIT_SUCCESS)
+    {
+      return status;
+    }
+  }
 
   httplib::Server svr;
 
   svr.Get("/health", [](const httplib::Request &req, httplib::Response &res)
           { res.status = 200; });
-  svr.Post("/generate", [&clipApp, &clipAppMNN, &unetApp, &vaeDecoderApp, &safetyCheckerApp](const httplib::Request &req, httplib::Response &res)
+  svr.Post("/generate", [&clipApp, &clipAppMNN, &unetApp, &vaeDecoderApp, &vaeEncoderApp, &safetyCheckerApp](const httplib::Request &req, httplib::Response &res)
            {
   try {
     auto json = nlohmann::json::parse(req.body);
@@ -1371,7 +1478,26 @@ int main(int argc, char **argv)
       output_size = size;
       sample_size = size / 8;
     }
-
+    img2img = false;
+    std::vector<float> img_float_data;
+    if (json.contains("image")) {
+      img2img = true;
+      auto image = json["image"].get<std::string>();
+      auto decoded = base64_decode(image);
+      auto decoded_buffer = std::vector<uint8_t>(decoded.begin(), decoded.end());
+      std::vector<uint8_t> decoded_image;
+      decode_image(decoded_buffer, decoded_image, output_size);
+      xt::xarray<uint8_t> img_xt = xt::adapt(decoded_image, {1, output_size, output_size, 3});
+      xt::xarray<float> img_data = xt::cast<float>(img_xt);
+      img_data = xt::eval(img_data / 255.0);
+      img_data = xt::transpose(img_data, {0, 3, 1, 2});
+      img_data = xt::eval(img_data * 2.0 - 1.0);
+      img_float_data = std::vector<float>(img_data.begin(), img_data.end());
+    }
+    float denoise_strength = 0.6;
+    if (json.contains("denoise_strength")) {
+      denoise_strength = json["denoise_strength"].get<float>(); 
+    }
     unsigned seed = hashSeed(std::chrono::system_clock::now().time_since_epoch().count());
     if (json.contains("seed")) {
       seed = json["seed"].get<unsigned>(); 
@@ -1392,7 +1518,7 @@ int main(int argc, char **argv)
     
     res.set_chunked_content_provider(
       "text/event-stream",
-      [prompt, negative_prompt, steps, cfg, use_cfg, seed, &clipApp,&clipAppMNN, &unetApp, &vaeDecoderApp, &safetyCheckerApp]
+      [prompt, negative_prompt, steps, cfg, use_cfg, seed, img_float_data, denoise_strength, &clipApp, &clipAppMNN, &unetApp, &vaeDecoderApp, &vaeEncoderApp, &safetyCheckerApp]
       (size_t, httplib::DataSink& sink) -> bool {
         try {
           GenerationResult result;
@@ -1404,9 +1530,12 @@ int main(int argc, char **argv)
             cfg,
             use_cfg,
             seed,
+            img_float_data,
+            denoise_strength,
             clipAppMNN, 
             unetApp.get(), 
             vaeDecoderApp.get(),
+            vaeEncoderApp.get(),
             safetyCheckerApp,
             [&sink](int step, int total_steps) {
               nlohmann::json progress = {

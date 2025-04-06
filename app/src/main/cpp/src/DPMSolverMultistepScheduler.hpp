@@ -217,7 +217,7 @@ public:
         return (sigma_t_val / sigma_s0_val) * sample - (alpha_t * (std::exp(-h) - 1.0f)) * D0 + (alpha_t * ((std::exp(-h) - 1.0f) / h + 1.0f)) * D1 - (alpha_t * ((std::exp(-h) - 1.0f + h) / (h * h) - 0.5f)) * D2;
     }
 
-    int index_for_timestep(int timestep)
+    int index_for_timestep(int timestep) const
     {
         std::vector<size_t> indices;
         for (size_t i = 0; i < timesteps_.size(); ++i)
@@ -290,6 +290,52 @@ public:
 
         step_index_ = step_index_.value() + 1;
         return {prev_sample};
+    }
+
+    void set_begin_index(int begin_index)
+    {
+        begin_index_ = begin_index;
+    }
+
+    xt::xarray<float> add_noise(
+        const xt::xarray<float> &original_samples,
+        const xt::xarray<float> &noise,
+        const xt::xarray<int> &timesteps) const
+    {
+        std::vector<int> step_indices;
+
+        if (!begin_index_)
+        {
+            for (size_t i = 0; i < timesteps.size(); ++i)
+            {
+                step_indices.push_back(index_for_timestep(timesteps(i)));
+            }
+        }
+        else if (step_index_)
+        {
+            step_indices.resize(timesteps.size(), step_index_.value());
+        }
+        else
+        {
+            step_indices.resize(timesteps.size(), begin_index_.value());
+        }
+
+        xt::xarray<float> sigma = xt::zeros<float>({step_indices.size()});
+        for (size_t i = 0; i < step_indices.size(); ++i)
+        {
+            sigma(i) = sigmas_(step_indices[i]);
+        }
+
+        std::vector<size_t> new_shape = {sigma.size(), 1, 1, 1};
+        auto reshaped_sigma = xt::reshape_view(sigma, new_shape);
+        std::cout << "reshaped_sigma: " << reshaped_sigma << std::endl;
+
+        xt::xarray<float> alpha_t = xt::ones_like(reshaped_sigma) / xt::sqrt(reshaped_sigma * reshaped_sigma + 1.0f);
+        xt::xarray<float> sigma_t = reshaped_sigma * alpha_t;
+
+        std::cout << "alpha_t: " << alpha_t << std::endl;
+        std::cout << "sigma_t: " << sigma_t << std::endl;
+        return alpha_t * original_samples + sigma_t * noise;
     }
 
     const xt::xarray<float> &get_timesteps() const { return timesteps_; }

@@ -457,6 +457,114 @@ public:
     //  m_graphsInfo = nullptr;
     return returnStatus;
   }
+  StatusCode executeVaeEncoderGraphs(Picture &encoder_input, VaeEncoderOutput &encoder_output)
+  {
+    auto returnStatus = StatusCode::SUCCESS;
+
+    for (size_t graphIdx = 0; graphIdx < m_graphsCount; graphIdx++)
+    {
+      QNN_DEBUG("Starting encoder execution for graphIdx: %d", graphIdx);
+
+      Qnn_Tensor_t *inputs = nullptr;
+      Qnn_Tensor_t *outputs = nullptr;
+      // set input/output tensor
+      if (qnn::tools::iotensor::StatusCode::SUCCESS !=
+          m_ioTensor.setupInputAndOutputTensors(&inputs, &outputs, (*m_graphsInfo)[graphIdx]))
+      {
+        QNN_ERROR("Error in setting up Input and output Tensors for graphIdx: %d", graphIdx);
+        returnStatus = StatusCode::FAILURE;
+        break;
+      }
+
+      auto graphInfo = (*m_graphsInfo)[graphIdx];
+
+      if (graphInfo.numInputTensors != 1)
+      {
+        QNN_ERROR("Expecting 1 input tensors, got %d", graphInfo.numInputTensors);
+        returnStatus = StatusCode::FAILURE;
+        break;
+      }
+
+      // latents
+      {
+        uint16_t *latents = static_cast<uint16_t *>(QNN_TENSOR_GET_CLIENT_BUF(inputs[0]).data);
+        qnn::tools::datautil::floatToTfN(latents,
+                                         encoder_input.pixel_values.data(),
+                                         inputs[0].v1.quantizeParams.scaleOffsetEncoding.offset,
+                                         inputs[0].v1.quantizeParams.scaleOffsetEncoding.scale,
+                                         encoder_input.pixel_values.size());
+        // memcpy(QNN_TENSOR_GET_CLIENT_BUF(inputs[0]).data,
+        //        encoder_input.pixels.data(),
+        //        encoder_input.pixels.size() * sizeof(uint16_t));
+      }
+
+      // execute graph
+      QNN_DEBUG("Executing encoder graph: %d", graphIdx);
+      auto start_time = std::chrono::high_resolution_clock::now();
+
+      auto executeStatus = m_qnnFunctionPointers.qnnInterface.graphExecute(
+          graphInfo.graph,
+          inputs,
+          graphInfo.numInputTensors,
+          outputs,
+          graphInfo.numOutputTensors,
+          m_profileBackendHandle,
+          nullptr);
+
+      auto end_time = std::chrono::high_resolution_clock::now();
+      int duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+      QNN_INFO("Encoder graph execution time: %d ms", duration);
+      if (QNN_GRAPH_NO_ERROR != executeStatus)
+      {
+        returnStatus = StatusCode::FAILURE;
+        QNN_ERROR("Encoder graph execution failed!");
+      }
+      // get output
+      if (StatusCode::SUCCESS == returnStatus)
+      {
+        {
+          float *tmp = nullptr;
+          float *latentsData = encoder_output.mean.data();
+          if (qnn::tools::iotensor::StatusCode::SUCCESS != m_ioTensor.convertToFloat(&tmp, &outputs[0]))
+          {
+            returnStatus = StatusCode::FAILURE;
+            break;
+          }
+          memcpy(latentsData, tmp, encoder_output.mean.size() * sizeof(float));
+          free(tmp);
+        }
+        {
+          float *tmp = nullptr;
+          float *latentsData = encoder_output.std.data();
+          if (qnn::tools::iotensor::StatusCode::SUCCESS != m_ioTensor.convertToFloat(&tmp, &outputs[1]))
+          {
+            returnStatus = StatusCode::FAILURE;
+            break;
+          }
+          memcpy(latentsData, tmp, encoder_output.std.size() * sizeof(float));
+          free(tmp);
+        }
+      }
+      if (StatusCode::SUCCESS != returnStatus)
+      {
+        break;
+      }
+      // clean up
+      m_ioTensor.tearDownInputAndOutputTensors(inputs,
+                                               outputs,
+                                               graphInfo.numInputTensors,
+                                               graphInfo.numOutputTensors);
+      inputs = nullptr;
+      outputs = nullptr;
+      if (StatusCode::SUCCESS != returnStatus)
+      {
+        break;
+      }
+    }
+    //  qnn_wrapper_api::freeGraphsInfo(&m_graphsInfo, m_graphsCount);
+    //  m_graphsInfo = nullptr;
+    return returnStatus;
+  }
   StatusCode cleanUnetGraphs(Qnn_Tensor_t *inputs, Qnn_Tensor_t *outputs)
   {
     auto returnStatus = StatusCode::SUCCESS;

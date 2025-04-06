@@ -50,6 +50,12 @@ struct Picture
   std::vector<uint8_t> pixels;
 };
 
+struct VaeEncoderOutput
+{
+  std::vector<float> mean;
+  std::vector<float> std;
+};
+
 struct GenerationResult
 {
   std::vector<uint8_t> image_data;
@@ -86,6 +92,68 @@ inline std::string base64_encode(const std::string &in)
   {
     out.push_back('=');
   }
+  return out;
+}
+inline std::string base64_decode(const std::string &in)
+{
+  static const std::string base64_chars =
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  static std::array<int, 256> lookup;
+  static bool initialized = false;
+
+  if (!initialized)
+  {
+    // 初始化查找表
+    lookup.fill(-1);
+    for (int i = 0; i < 64; i++)
+    {
+      lookup[static_cast<unsigned char>(base64_chars[i])] = i;
+    }
+    initialized = true;
+  }
+
+  size_t in_len = in.size();
+  if (in_len % 4 != 0)
+  {
+    // Base64 字符串长度应该是4的倍数
+    throw std::runtime_error("Invalid base64 length");
+  }
+
+  size_t out_len = in_len / 4 * 3;
+  if (in_len > 0 && in[in_len - 1] == '=')
+    out_len--;
+  if (in_len > 1 && in[in_len - 2] == '=')
+    out_len--;
+
+  std::string out;
+  out.reserve(out_len);
+
+  int val = 0, valb = -8;
+  for (char c : in)
+  {
+    if (c == '=')
+    {
+      // 跳过填充字符
+      continue;
+    }
+
+    int idx = lookup[static_cast<unsigned char>(c)];
+    if (idx == -1)
+    {
+      // 跳过非 Base64 字符
+      continue;
+    }
+
+    val = (val << 6) + idx;
+    valb += 6;
+
+    if (valb >= 0)
+    {
+      out.push_back(static_cast<char>((val >> valb) & 0xFF));
+      valb -= 8;
+    }
+  }
+
   return out;
 }
 
@@ -230,6 +298,75 @@ bool safety_check(const std::vector<uint8_t> &image_data,
     return false;
   }
 }
+
+void decode_image(const std::vector<uint8_t> &image_binary,
+                  std::vector<uint8_t> &output_pixels,
+                  int output_size)
+{
+  int width, height, channels;
+  uint8_t *decoded_data = stbi_load_from_memory(
+      image_binary.data(),
+      image_binary.size(),
+      &width, &height, &channels, 3); // Force 3 channels (RGB)
+
+  if (!decoded_data)
+  {
+    std::string error_msg = stbi_failure_reason(); // 获取具体错误原因
+    std::cout << "Error decoding image: " << error_msg << std::endl;
+    throw std::runtime_error("Failed to decode image: " + error_msg);
+  }
+
+  // Determine the scale and crop dimensions to maintain aspect ratio
+  float scale = std::min(
+      static_cast<float>(output_size) / width,
+      static_cast<float>(output_size) / height);
+
+  int scaled_width = static_cast<int>(width * scale);
+  int scaled_height = static_cast<int>(height * scale);
+
+  // Calculate crop positions (center crop)
+  int crop_x = (scaled_width - output_size) / 2;
+  int crop_y = (scaled_height - output_size) / 2;
+
+  // Resize the image with stb_image_resize
+  std::vector<uint8_t> resized_image(scaled_width * scaled_height * 3);
+  if (!stbir_resize_uint8_linear(
+          decoded_data, width, height, 0,
+          resized_image.data(), scaled_width, scaled_height, 0,
+          STBIR_RGB))
+  {
+    stbi_image_free(decoded_data);
+    throw std::runtime_error("Failed to resize image");
+  }
+
+  // Free the original decoded data
+  stbi_image_free(decoded_data);
+
+  // Perform center crop
+  output_pixels.resize(output_size * output_size * 3);
+  for (int y = 0; y < output_size; y++)
+  {
+    for (int x = 0; x < output_size; x++)
+    {
+      for (int c = 0; c < 3; c++)
+      {
+        int src_idx = ((y + crop_y) * scaled_width + (x + crop_x)) * 3 + c;
+        int dst_idx = (y * output_size + x) * 3 + c;
+
+        // Ensure we're not accessing out of bounds
+        if (src_idx >= 0 && src_idx < scaled_width * scaled_height * 3)
+        {
+          output_pixels[dst_idx] = resized_image[src_idx];
+        }
+        else
+        {
+          output_pixels[dst_idx] = 0; // Black for out of bounds
+        }
+      }
+    }
+  }
+}
+
 inline void PrintEncodeResult(const std::vector<int> &ids)
 {
   std::cout << "tokens=[";
