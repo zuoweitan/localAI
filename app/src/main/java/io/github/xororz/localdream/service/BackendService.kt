@@ -89,10 +89,10 @@ class BackendService : Service() {
                 if (startBackend(model)) {
                     updateState(BackendState.Running)
                 } else {
-                    updateState(BackendState.Error("启动后端失败"))
+                    updateState(BackendState.Error("Backend start failed"))
                 }
             } else {
-                updateState(BackendState.Error("找不到模型"))
+                updateState(BackendState.Error("Model not found"))
                 stopSelf()
             }
         }
@@ -102,8 +102,8 @@ class BackendService : Service() {
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val name = "后端服务"
-            val descriptionText = "保持模型后端运行"
+            val name = "Backend Service"
+            val descriptionText = "Backend service for image generation"
             val importance = NotificationManager.IMPORTANCE_LOW
             val channel = NotificationChannel(CHANNEL_ID, name, importance).apply {
                 description = descriptionText
@@ -201,6 +201,9 @@ class BackendService : Service() {
                 return false
             }
 
+            val preferences = this.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+            val useImg2img = preferences.getBoolean("use_img2img", false)
+
             var clipfilename = "clip.bin"
             if (model.useCpuClip) {
                 clipfilename = "clip.mnn"
@@ -216,6 +219,11 @@ class BackendService : Service() {
                 "--port", "8081",
                 "--text_embedding_size", model.textEmbeddingSize.toString()
             )
+            if (useImg2img) {
+                command = command + listOf(
+                    "--vae_encoder", File(modelsDir, "vae_encoder.bin").absolutePath,
+                )
+            }
             if (model.id.startsWith("pony")) {
                 command += "--ponyv55"
             }
@@ -233,6 +241,11 @@ class BackendService : Service() {
                     "--text_embedding_size", if (model.id != "sd21") "768" else "1024",
                     "--cpu"
                 )
+                if (useImg2img) {
+                    command = command + listOf(
+                        "--vae_encoder", File(modelsDir, "vae_encoder.mnn").absolutePath,
+                    )
+                }
             }
             if (BuildConfig.FLAVOR == "filter") {
                 command = command + listOf(

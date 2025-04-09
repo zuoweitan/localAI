@@ -91,6 +91,17 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.ui.geometry.Offset
 import io.github.xororz.localdream.BuildConfig
 
+import android.net.Uri
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import android.graphics.BitmapFactory
+
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia
+import kotlinx.coroutines.CoroutineScope
+
+
 private suspend fun reportImage(
     context: Context,
     bitmap: Bitmap,
@@ -284,7 +295,9 @@ data class GenerationParameters(
     val negativePrompt: String,
     val generationTime: String?,
     val size: Int,
-    val runOnCpu: Boolean
+    val runOnCpu: Boolean,
+    val denoiseStrength: Float = 0.6f,
+    val inputImage: String? = null
 )
 
 @SuppressLint("DefaultLocale")
@@ -334,6 +347,9 @@ fun ModelRunScreen(
     var steps by remember { mutableStateOf(20f) }
     var seed by remember { mutableStateOf("") }
     var size by remember { mutableStateOf(if (model?.runOnCpu == true) 256 else 512) }
+    var denoiseStrength by remember { mutableStateOf(0.6f) }
+    var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
+    var base64EncodeDone by remember { mutableStateOf(false) }
     var returnedSeed by remember { mutableStateOf<Long?>(null) }
     var isRunning by remember { mutableStateOf(false) }
     var progress by remember { mutableStateOf(0f) }
@@ -352,6 +368,117 @@ fun ModelRunScreen(
     var scale by remember { mutableStateOf(1f) }
     var offsetX by remember { mutableStateOf(0f) }
     var offsetY by remember { mutableStateOf(0f) }
+    val preferences = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+    val useImg2img = preferences.getBoolean("use_img2img", false)
+
+    fun processSelectedImage(uri: Uri) {
+        selectedImageUri = uri
+
+        scope.launch(Dispatchers.IO) {
+            try {
+                val inputStream = context.contentResolver.openInputStream(uri)
+                val bytes = inputStream?.readBytes()
+                inputStream?.close()
+
+                bytes?.let { imageBytes ->
+                    base64EncodeDone = false
+                    val base64String = Base64.getEncoder().encodeToString(imageBytes)
+
+                    val tmpFile = File(context.filesDir, "tmp.txt")
+                    tmpFile.writeText(base64String)
+
+                    base64EncodeDone = true
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "read error: ${e.message}", Toast.LENGTH_SHORT).show()
+                    selectedImageUri = null
+                }
+            }
+        }
+    }
+
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        uri?.let { processSelectedImage(it) }
+    }
+
+    val contentPickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        uri?.let { processSelectedImage(it) }
+    }
+
+    val requestMediaImagePermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            contentPickerLauncher.launch("image/*")
+        } else {
+            Toast.makeText(
+                context,
+                "Media permission is needed for img2img generation",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
+    val requestStoragePermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            contentPickerLauncher.launch("image/*")
+        } else {
+            Toast.makeText(
+                context,
+                "Media permission is needed for img2img generation",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
+    fun onSelectImageClick() {
+        when {
+            // Android 14+
+            Build.VERSION.SDK_INT >= 34 -> {
+                // PhotoPicker API
+                photoPickerLauncher.launch(PickVisualMediaRequest(PickVisualMedia.ImageOnly))
+            }
+
+            // Android 13
+            Build.VERSION.SDK_INT >= 33 -> {
+                when {
+                    ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.READ_MEDIA_IMAGES
+                    ) == PackageManager.PERMISSION_GRANTED -> {
+                        contentPickerLauncher.launch("image/*")
+                    }
+
+                    else -> {
+                        requestMediaImagePermissionLauncher.launch(Manifest.permission.READ_MEDIA_IMAGES)
+                    }
+                }
+            }
+
+            // Android 12-
+            else -> {
+                when {
+                    ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.READ_EXTERNAL_STORAGE
+                    ) == PackageManager.PERMISSION_GRANTED -> {
+                        contentPickerLauncher.launch("image/*")
+                    }
+
+                    else -> {
+                        requestStoragePermissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
+                    }
+                }
+            }
+        }
+    }
 
     fun handleSaveImage(
         context: Context,
@@ -444,6 +571,7 @@ fun ModelRunScreen(
             cfg = prefs.cfg
             seed = prefs.seed
             size = if (model?.runOnCpu == true) prefs.size else model?.generationSize ?: 512
+            denoiseStrength = prefs.denoiseStrength
         }
     }
     DisposableEffect(Unit) {
@@ -606,6 +734,7 @@ fun ModelRunScreen(
                                 model?.defaultNegativePrompt ?: ""
                             )
                             generationPreferences.saveSize(modelId, 256)
+                            generationPreferences.saveDenoiseStrength(modelId, 0.6f)
 
                             withContext(Dispatchers.Main) {
                                 steps = 20f
@@ -768,19 +897,41 @@ fun ModelRunScreen(
                                                     false
                                                 )
                                             }
-                                            TextButton(
-                                                onClick = { showAdvancedSettings = true }
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically
                                             ) {
-                                                Text(
-                                                    stringResource(R.string.advanced_settings),
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    modifier = Modifier.padding(end = 4.dp)
-                                                )
-                                                Icon(
-                                                    Icons.Default.Settings,
-                                                    contentDescription = stringResource(R.string.settings),
-                                                    modifier = Modifier.size(20.dp)
-                                                )
+                                                if (useImg2img) {
+                                                    TextButton(
+                                                        onClick = {
+                                                            onSelectImageClick()
+                                                        }
+                                                    ) {
+                                                        Text(
+                                                            "img2img",
+                                                            style = MaterialTheme.typography.bodyMedium,
+                                                            modifier = Modifier.padding(end = 4.dp)
+                                                        )
+                                                        Icon(
+                                                            Icons.Default.Image,
+                                                            contentDescription = "select image",
+                                                            modifier = Modifier.size(20.dp)
+                                                        )
+                                                    }
+                                                }
+                                                TextButton(
+                                                    onClick = { showAdvancedSettings = true }
+                                                ) {
+                                                    Text(
+                                                        stringResource(R.string.advanced_settings),
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        modifier = Modifier.padding(end = 4.dp)
+                                                    )
+                                                    Icon(
+                                                        Icons.Default.Settings,
+                                                        contentDescription = stringResource(R.string.settings),
+                                                        modifier = Modifier.size(20.dp)
+                                                    )
+                                                }
                                             }
                                             if (showAdvancedSettings) {
                                                 AlertDialog(
@@ -918,6 +1069,31 @@ fun ModelRunScreen(
                                                                             }
                                                                         }
                                                                     }
+                                                                }
+                                                            }
+                                                            if (useImg2img) {
+                                                                Column {
+                                                                    Text(
+                                                                        "(img2img)Denoise Strength: %.2f".format(
+                                                                            denoiseStrength
+                                                                        ),
+                                                                        style = MaterialTheme.typography.bodyMedium
+                                                                    )
+                                                                    Slider(
+                                                                        value = denoiseStrength,
+                                                                        onValueChange = {
+                                                                            denoiseStrength = it
+                                                                            scope.launch {
+                                                                                generationPreferences.saveDenoiseStrength(
+                                                                                    modelId,
+                                                                                    denoiseStrength
+                                                                                )
+                                                                            }
+                                                                        },
+                                                                        valueRange = 0f..1f,
+                                                                        steps = 99,
+                                                                        modifier = Modifier.fillMaxWidth()
+                                                                    )
                                                                 }
                                                             }
                                                             Column(
@@ -1123,7 +1299,10 @@ fun ModelRunScreen(
                                         Button(
                                             onClick = {
                                                 focusManager.clearFocus()
-                                                android.util.Log.d("ModelRunScreen", "start generation")
+                                                android.util.Log.d(
+                                                    "ModelRunScreen",
+                                                    "start generation"
+                                                )
                                                 generationParamsTmp = GenerationParameters(
                                                     steps = steps.roundToInt(),
                                                     cfg = cfg,
@@ -1132,8 +1311,11 @@ fun ModelRunScreen(
                                                     negativePrompt = negativePrompt,
                                                     generationTime = "",
                                                     size = size,
-                                                    runOnCpu = model.runOnCpu
+                                                    runOnCpu = model.runOnCpu,
+                                                    denoiseStrength = denoiseStrength,
+                                                    inputImage = null
                                                 )
+
                                                 val intent = Intent(
                                                     context,
                                                     BackgroundGenerationService::class.java
@@ -1145,8 +1327,16 @@ fun ModelRunScreen(
                                                     seed.toLongOrNull()
                                                         ?.let { putExtra("seed", it) }
                                                     putExtra("size", size)
+                                                    putExtra("denoise_strength", denoiseStrength)
+
+                                                    if (selectedImageUri != null && base64EncodeDone) {
+                                                        putExtra("has_image", true)
+                                                    }
                                                 }
-                                                android.util.Log.d("ModelRunScreen", "start service")
+                                                android.util.Log.d(
+                                                    "ModelRunScreen",
+                                                    "start service"
+                                                )
                                                 context.startForegroundService(intent)
                                                 android.util.Log.d(
                                                     "ModelRunScreen",
@@ -1168,6 +1358,7 @@ fun ModelRunScreen(
                                         }
                                     }
                                 }
+
 
                                 AnimatedVisibility(
                                     visible = errorMessage != null,
@@ -1228,6 +1419,59 @@ fun ModelRunScreen(
                                                     alpha = 0.7f
                                                 )
                                             )
+                                        }
+                                    }
+                                }
+
+                                AnimatedVisibility(
+                                    visible = selectedImageUri != null && base64EncodeDone,
+                                    enter = expandVertically() + fadeIn(),
+                                    exit = shrinkVertically() + fadeOut()
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 8.dp)
+                                    ) {
+                                        Card(
+                                            modifier = Modifier
+                                                .size(100.dp)
+                                                .align(Alignment.CenterStart),
+                                            shape = RoundedCornerShape(8.dp),
+                                        ) {
+                                            Box {
+                                                selectedImageUri?.let { uri ->
+                                                    AsyncImage(
+                                                        model = ImageRequest.Builder(LocalContext.current)
+                                                            .data(uri)
+                                                            .crossfade(true)
+                                                            .build(),
+                                                        contentDescription = "selected image",
+                                                        modifier = Modifier.fillMaxSize()
+                                                    )
+                                                }
+
+                                                IconButton(
+                                                    onClick = {
+                                                        selectedImageUri = null
+                                                    },
+                                                    modifier = Modifier
+                                                        .size(24.dp)
+                                                        .background(
+                                                            color = MaterialTheme.colorScheme.surface.copy(
+                                                                alpha = 0.7f
+                                                            ),
+                                                            shape = CircleShape
+                                                        )
+                                                        .align(Alignment.TopEnd)
+                                                ) {
+                                                    Icon(
+                                                        Icons.Default.Clear,
+                                                        contentDescription = "remove image",
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
                                 }

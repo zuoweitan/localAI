@@ -23,6 +23,7 @@ import java.io.IOException
 import java.io.InputStreamReader
 import java.util.concurrent.TimeUnit
 import io.github.xororz.localdream.R
+import java.io.File
 
 class BackgroundGenerationService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.IO + Job())
@@ -88,6 +89,23 @@ class BackgroundGenerationService : Service() {
         val cfg = intent.getFloatExtra("cfg", 7f)
         val seed = if (intent.hasExtra("seed")) intent.getLongExtra("seed", 0) else null
         val size = intent.getIntExtra("size", 512)
+        val denoiseStrength = intent.getFloatExtra("denoise_strength", 0.6f)
+
+        val image = if (intent.getBooleanExtra("has_image", false)) {
+            try {
+                val tmpFile = File(applicationContext.filesDir, "tmp.txt")
+                if (tmpFile.exists()) {
+                    tmpFile.readText()
+                } else {
+                    null
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("GenerationService", "Failed to read image data", e)
+                null
+            }
+        } else {
+            null
+        }
 
         android.util.Log.d("GenerationService", "params: steps=$steps, cfg=$cfg, seed=$seed")
 
@@ -99,7 +117,7 @@ class BackgroundGenerationService : Service() {
 
         serviceScope.launch {
             android.util.Log.d("GenerationService", "start generation")
-            runGeneration(prompt, negativePrompt, steps, cfg, seed, size)
+            runGeneration(prompt, negativePrompt, steps, cfg, seed, size, image, denoiseStrength)
         }
 
         return START_NOT_STICKY
@@ -111,7 +129,9 @@ class BackgroundGenerationService : Service() {
         steps: Int,
         cfg: Float,
         seed: Long?,
-        size: Int
+        size: Int,
+        image: String?,
+        denoiseStrength: Float
     ) = withContext(Dispatchers.IO) {
         try {
             updateState(GenerationState.Progress(0f))
@@ -123,7 +143,9 @@ class BackgroundGenerationService : Service() {
                 put("cfg", cfg)
                 put("use_cfg", true)
                 put("size", size)
+                put("denoise_strength", denoiseStrength)
                 seed?.let { put("seed", it) }
+                image?.let { put("image", it) }
             }
 
             val client = OkHttpClient.Builder()
@@ -181,7 +203,7 @@ class BackgroundGenerationService : Service() {
                                             val size = message.optInt("width", 256)
 
                                             if (base64Image.isNullOrEmpty()) {
-                                                throw IOException("未收到图像数据")
+                                                throw IOException("no image data")
                                             }
 
                                             val imageBytes = Base64.getDecoder().decode(base64Image)
@@ -214,7 +236,7 @@ class BackgroundGenerationService : Service() {
                                         }
 
                                         "error" -> {
-                                            val errorMsg = message.optString("message", "未知错误")
+                                            val errorMsg = message.optString("message", "unknown error")
                                             throw IOException(errorMsg)
                                         }
                                     }
@@ -240,8 +262,8 @@ class BackgroundGenerationService : Service() {
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val name = "图像生成服务"
-            val descriptionText = "用于在后台生成图像"
+            val name = "Image Generation"
+            val descriptionText = "Background image generation"
             val importance = NotificationManager.IMPORTANCE_LOW
             val channel = NotificationChannel(CHANNEL_ID, name, importance).apply {
                 description = descriptionText

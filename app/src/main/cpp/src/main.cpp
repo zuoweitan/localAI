@@ -39,6 +39,7 @@ std::unordered_map<int, std::string> g_id2token;
 MNN::Session *clipSession;
 MNN::Session *unetSession;
 MNN::Session *vaeDecoderSession;
+MNN::Session *vaeEncoderSession;
 MNN::Session *safetyCheckerSession;
 bool use_mnn = false;
 bool use_safety_checker = false;
@@ -135,6 +136,7 @@ namespace qnn
         MNN::Interpreter *clip_mnn;
         MNN::Interpreter *unet_mnn;
         MNN::Interpreter *vae_decoder_mnn;
+        MNN::Interpreter *vae_encoder_mnn;
         MNN::Interpreter *safety_checker_mnn;
       };
       ModelApps processCommandLine(int argc,
@@ -347,6 +349,10 @@ namespace qnn
             apps.clip_mnn = MNN::Interpreter::createFromFile(clipPath.c_str());
             apps.unet_mnn = MNN::Interpreter::createFromFile(unetPath.c_str());
             apps.vae_decoder_mnn = MNN::Interpreter::createFromFile(vaeDecoderPath.c_str());
+            if (img2img)
+            {
+              apps.vae_encoder_mnn = MNN::Interpreter::createFromFile(vaeEncoderPath.c_str());
+            }
 
             return apps;
           }
@@ -549,9 +555,12 @@ GenerationResult generateImage(
     float cfg,
     bool use_cfg,
     unsigned seed,
+    std::vector<float> img_data,
+    float denoise_strength,
     QnnModel *clipApp,
     QnnModel *unetApp,
     QnnModel *vaeDecoderApp,
+    QnnModel *vaeEncoderApp,
     MNN::Interpreter *safetyCheckerInterpreter,
     std::function<void(int step, int total_steps)> progress_callback)
 {
@@ -563,6 +572,10 @@ GenerationResult generateImage(
   if (!clipApp || !unetApp || !vaeDecoderApp)
   {
     throw std::runtime_error("Models not initialized");
+  }
+  if (img2img && !vaeEncoderApp)
+  {
+    throw std::runtime_error("VAE Encoder model not initialized");
   }
   if (prompt.empty())
   {
@@ -624,13 +637,47 @@ GenerationResult generateImage(
     xt::random::seed(seed);
     xt::xarray<float> latents = xt::random::randn<float>(shape);
 
-    for (int i = 0; i < timesteps.size(); i++)
+    int start_step = 0;
+    if (img2img && img_data.size() == 3 * output_size * output_size)
     {
+      Picture vae_encoder_input;
+      vae_encoder_input.pixel_values.resize(1 * 3 * output_size * output_size);
+      memcpy(vae_encoder_input.pixel_values.data(), img_data.data(), 3 * output_size * output_size * sizeof(float));
+      VaeEncoderOutput vae_encoder_output;
+      vae_encoder_output.mean.resize(1 * 4 * sample_size * sample_size);
+      vae_encoder_output.std.resize(1 * 4 * sample_size * sample_size);
+      auto start = std::chrono::high_resolution_clock::now();
+      if (StatusCode::SUCCESS != vaeEncoderApp->executeVaeEncoderGraphs(vae_encoder_input, vae_encoder_output))
+      {
+        throw std::runtime_error("VAE encoder execution failed");
+      }
+      auto end = std::chrono::high_resolution_clock::now();
+      auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+      std::cout << "VAE encoder runSession duration: " << duration.count() << "ms" << std::endl;
+      auto mean = xt::adapt(vae_encoder_output.mean, {1, 4, sample_size, sample_size});
+      auto std = xt::adapt(vae_encoder_output.std, {1, 4, sample_size, sample_size});
+      xt::xarray<float> noise_0 = xt::random::randn<float>(shape);
+      xt::xarray<float> img_latent_xt = xt::eval(mean + std * noise_0);
+      xt::xarray<float> img_latent_scaled = xt::eval(0.18215 * img_latent_xt);
+
+      start_step = (int)(steps * (1 - denoise_strength));
+
+      total_run_steps -= start_step;
+      scheduler.set_begin_index(start_step);
+      std::vector<int> t = {(int)(timesteps[start_step])};
+      xt::xarray<int> x_xt = xt::adapt(t, {1});
+      latents = xt::random::randn<float>(shape);
+      latents = scheduler.add_noise(img_latent_scaled, latents, x_xt);
+    }
+
+    for (int i = start_step; i < timesteps.size(); i++)
+    {
+      auto start = std::chrono::high_resolution_clock::now();
       xt::xarray<float> latents_input = xt::concatenate(xt::xtuple(latents, latents));
       unet_input.latents = std::vector<float>(latents_input.begin(), latents_input.end());
       unet_input.timestep = timesteps[i];
 
-      if (i == 0)
+      if (i == start_step)
       {
         auto step_start = std::chrono::high_resolution_clock::now();
         if (StatusCode::SUCCESS != unetApp->executeUnetGraphsFirst(unet_input, unet_output, inputs, outputs, use_cfg))
@@ -647,6 +694,9 @@ GenerationResult generateImage(
           throw std::runtime_error("UNET step execution failed");
         }
       }
+      auto end = std::chrono::high_resolution_clock::now();
+      auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+      std::cout << "UNET runSession duration: " << duration.count() << "ms" << std::endl;
 
       xt::xarray<float> noise_pred;
       if (use_cfg)
@@ -664,12 +714,18 @@ GenerationResult generateImage(
       }
 
       latents = scheduler.step(noise_pred, timesteps[i], latents).prev_sample;
+      auto end2 = std::chrono::high_resolution_clock::now();
+      auto duration2 = std::chrono::duration_cast<std::chrono::milliseconds>(end2 - end).count();
+      std::cout << "Scheduler step duration: " << duration2 << "ms" << std::endl;
 
       current_step++;
       if (progress_callback)
       {
         progress_callback(current_step, total_run_steps);
       }
+      auto end3 = std::chrono::high_resolution_clock::now();
+      auto duration3 = std::chrono::duration_cast<std::chrono::milliseconds>(end3 - end2).count();
+      std::cout << "callback duration: " << duration3 << "ms" << std::endl;
     }
 
     latents = xt::eval((1 / 0.18215) * latents);
@@ -834,7 +890,7 @@ GenerationResult generateImageClipCPU(
     xt::xarray<float> latents = xt::random::randn<float>(shape);
 
     int start_step = 0;
-    if (img2img)
+    if (img2img && img_data.size() == 3 * output_size * output_size)
     {
       Picture vae_encoder_input;
       vae_encoder_input.pixel_values.resize(1 * 3 * output_size * output_size);
@@ -852,8 +908,6 @@ GenerationResult generateImageClipCPU(
       std::cout << "VAE encoder runSession duration: " << duration.count() << "ms" << std::endl;
       auto mean = xt::adapt(vae_encoder_output.mean, {1, 4, sample_size, sample_size});
       auto std = xt::adapt(vae_encoder_output.std, {1, 4, sample_size, sample_size});
-      std::cout << "mean: " << mean << std::endl;
-      std::cout << "std: " << std << std::endl;
       xt::xarray<float> noise_0 = xt::random::randn<float>(shape);
       xt::xarray<float> img_latent_xt = xt::eval(mean + std * noise_0);
       xt::xarray<float> img_latent_scaled = xt::eval(0.18215 * img_latent_xt);
@@ -986,9 +1040,12 @@ GenerationResult generateImageMNN(
     float cfg,
     bool use_cfg,
     unsigned seed,
+    std::vector<float> img_data,
+    float denoise_strength,
     MNN::Interpreter *clipInterpreter,
     MNN::Interpreter *unetInterpreter,
     MNN::Interpreter *vaeDecoderInterpreter,
+    MNN::Interpreter *vaeEncoderInterpreter,
     MNN::Interpreter *safetyCheckerInterpreter,
     std::function<void(int step, int total_steps)> progress_callback)
 {
@@ -1004,6 +1061,10 @@ GenerationResult generateImageMNN(
   if (prompt.empty())
   {
     throw std::invalid_argument("Input prompt cannot be empty");
+  }
+  if (img2img && !vaeEncoderInterpreter)
+  {
+    throw std::runtime_error("VAE Encoder model not initialized");
   }
   try
   {
@@ -1072,8 +1133,46 @@ GenerationResult generateImageMNN(
     xt::xarray<float> latents = xt::random::randn<float>(shape);
 
     std::vector<int> current_timestep = {0};
+    if (img2img && img_data.size() == 3 * output_size * output_size)
+    {
+      Picture vae_encoder_input;
+      vae_encoder_input.pixel_values.resize(1 * 3 * output_size * output_size);
+      memcpy(vae_encoder_input.pixel_values.data(), img_data.data(), 3 * output_size * output_size * sizeof(float));
+      VaeEncoderOutput vae_encoder_output;
+      vae_encoder_output.mean.resize(1 * 4 * sample_size * sample_size);
+      vae_encoder_output.std.resize(1 * 4 * sample_size * sample_size);
+      auto start = std::chrono::high_resolution_clock::now();
+      auto input = vaeEncoderInterpreter->getSessionInput(vaeEncoderSession, "input");
+      vaeEncoderInterpreter->resizeTensor(input, {1, 3, output_size, output_size});
+      vaeEncoderInterpreter->resizeSession(vaeEncoderSession);
 
-    for (int i = 0; i < timesteps.size(); i++)
+      memcpy(input->host<float>(), vae_encoder_input.pixel_values.data(), 3 * output_size * output_size * sizeof(float));
+      vaeEncoderInterpreter->runSession(vaeEncoderSession);
+      auto end = std::chrono::high_resolution_clock::now();
+      auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+      std::cout << "VAE encoder runSession duration: " << duration.count() << "ms" << std::endl;
+      auto mean = vaeEncoderInterpreter->getSessionOutput(vaeEncoderSession, "mean");
+      auto std = vaeEncoderInterpreter->getSessionOutput(vaeEncoderSession, "std");
+      memcpy(vae_encoder_output.mean.data(), mean->host<float>(), 4 * sample_size * sample_size * sizeof(float));
+      memcpy(vae_encoder_output.std.data(), std->host<float>(), 4 * sample_size * sample_size * sizeof(float));
+      xt::xarray<float> noise_0 = xt::random::randn<float>(shape);
+      xt::xarray<float> mean_xt = xt::adapt(vae_encoder_output.mean, {1, 4, sample_size, sample_size});
+      xt::xarray<float> std_xt = xt::adapt(vae_encoder_output.std, {1, 4, sample_size, sample_size});
+      std::cout << "mean: " << mean_xt << std::endl;
+      std::cout << "std: " << std_xt << std::endl;
+      xt::xarray<float> img_latent_xt = xt::eval(mean_xt + std_xt * noise_0);
+      xt::xarray<float> img_latent_scaled = xt::eval(0.18215 * img_latent_xt);
+      int start_step = (int)(steps * (1 - denoise_strength));
+      current_timestep[0] = start_step;
+      total_run_steps -= start_step;
+      scheduler.set_begin_index(start_step);
+      std::vector<int> t = {(int)(timesteps[start_step])};
+      xt::xarray<int> x_xt = xt::adapt(t, {1});
+      latents = xt::random::randn<float>(shape);
+      latents = scheduler.add_noise(img_latent_scaled, latents, x_xt);
+    }
+
+    for (int i = current_timestep[0]; i < timesteps.size(); i++)
     {
       xt::xarray<float> latents_input = xt::concatenate(xt::xtuple(latents, latents));
       unet_input_latents = std::vector<float>(latents_input.begin(), latents_input.end());
@@ -1208,7 +1307,7 @@ int main(int argc, char **argv)
   std::string clipPath, unetPath, vaeDecoderPath, vaeEncoderPath, safetyCheckerPath;
   std::string tokenizerPath;
 
-  auto res = sample_app::processCommandLine(argc, argv, loadFromCachedBinary, clipPath, unetPath, vaeDecoderPath, vaeEncoderPath, safetyCheckerPath, tokenizerPath);
+  auto res = sample_app::processCommandLine(argc, argv, loadFromCachedBinary, clipPath, unetPath, vaeEncoderPath, vaeDecoderPath, safetyCheckerPath, tokenizerPath);
 
   try
   {
@@ -1252,6 +1351,7 @@ int main(int argc, char **argv)
     auto clipApp = res.clip_mnn;
     auto unetApp = res.unet_mnn;
     auto vaeDecoderApp = res.vae_decoder_mnn;
+    auto vaeEncoderApp = res.vae_encoder_mnn;
     if (!clipApp || !unetApp || !vaeDecoderApp)
     {
       std::cerr << "Failed to load MNN models" << std::endl;
@@ -1261,11 +1361,20 @@ int main(int argc, char **argv)
     clipSession = clipApp->createSession(config_2);
     unetSession = unetApp->createSession(config_1);
     vaeDecoderSession = vaeDecoderApp->createSession(config_2);
+    if (img2img)
+    {
+      if (!vaeEncoderApp)
+      {
+        std::cerr << "Failed to load VAE Encoder MNN model" << std::endl;
+        return EXIT_FAILURE;
+      }
+      vaeEncoderSession = vaeEncoderApp->createSession(config_2);
+    }
     httplib::Server svr;
 
     svr.Get("/health", [](const httplib::Request &req, httplib::Response &res)
             { res.status = 200; });
-    svr.Post("/generate", [&clipApp, &unetApp, &vaeDecoderApp, &safetyCheckerApp](const httplib::Request &req, httplib::Response &res)
+    svr.Post("/generate", [&clipApp, &unetApp, &vaeDecoderApp, &vaeEncoderApp, &safetyCheckerApp](const httplib::Request &req, httplib::Response &res)
              {
   try {
     auto json = nlohmann::json::parse(req.body);
@@ -1283,6 +1392,8 @@ int main(int argc, char **argv)
     int size = 256;
     if (json.contains("size")) {
       size = json["size"].get<int>(); 
+      sample_size = size/8;
+      output_size = size;
     }
     std::string negative_prompt = "";
     if (json.contains("negative_prompt")) {
@@ -1292,22 +1403,46 @@ int main(int argc, char **argv)
     if (json.contains("use_cfg")) {
       use_cfg = json["use_cfg"].get<bool>(); 
     }
-
     unsigned seed = hashSeed(std::chrono::system_clock::now().time_since_epoch().count());
     if (json.contains("seed")) {
       seed = json["seed"].get<unsigned>(); 
     }
+
+    img2img = false;
+    std::vector<float> img_float_data;
+    if (json.contains("image")) {
+      img2img = true;
+      auto image = json["image"].get<std::string>();
+      auto decoded = base64_decode(image);
+      auto decoded_buffer = std::vector<uint8_t>(decoded.begin(), decoded.end());
+      std::vector<uint8_t> decoded_image;
+      decode_image(decoded_buffer, decoded_image, output_size);
+      if(decoded_image.size() != 3 * output_size * output_size)
+      {
+        img_float_data.clear();
+      } else {
+        xt::xarray<uint8_t> img_xt = xt::adapt(decoded_image, {1, output_size, output_size, 3});
+        xt::xarray<float> img_data = xt::cast<float>(img_xt);
+        img_data = xt::eval(img_data / 255.0);
+        img_data = xt::transpose(img_data, {0, 3, 1, 2});
+        img_data = xt::eval(img_data * 2.0 - 1.0);
+        img_float_data = std::vector<float>(img_data.begin(), img_data.end());
+      }
+    }
+    float denoise_strength = 0.6;
+    if (json.contains("denoise_strength")) {
+      denoise_strength = json["denoise_strength"].get<float>(); 
+    }
+    std::string prompt = json["prompt"].get<std::string>();
+
     std::cout<<"prompt: "<<json["prompt"].get<std::string>()<<std::endl;
     std::cout<<"negative_prompt: "<<negative_prompt<<std::endl;
-    std::cout<<"size: "<<size<<std::endl;
     std::cout<<"steps: "<<steps<<std::endl;
     std::cout<<"cfg: "<<cfg<<std::endl;
     std::cout<<"use_cfg: "<<use_cfg<<std::endl;
     std::cout<<"seed: "<<seed<<std::endl;
-    sample_size = size/8;
-    output_size = size;
-    
-    std::string prompt = json["prompt"].get<std::string>();
+    std::cout<<"size: "<<size<<std::endl;
+    std::cout<<"denoise_strength: "<<denoise_strength<<std::endl;
     
     res.set_header("Content-Type", "text/event-stream");
     res.set_header("Cache-Control", "no-cache");
@@ -1315,7 +1450,7 @@ int main(int argc, char **argv)
     
     res.set_chunked_content_provider(
       "text/event-stream",
-      [prompt, negative_prompt, steps, cfg, use_cfg, seed, &clipApp, &unetApp, &vaeDecoderApp, &safetyCheckerApp]
+      [prompt, negative_prompt, steps, cfg, use_cfg, seed, img_float_data, denoise_strength, &clipApp, &unetApp, &vaeDecoderApp, &vaeEncoderApp, &safetyCheckerApp]
       (size_t, httplib::DataSink& sink) -> bool {
         try {
           auto result = generateImageMNN(
@@ -1325,9 +1460,12 @@ int main(int argc, char **argv)
             cfg,
             use_cfg,
             seed,
+            img_float_data,
+            denoise_strength,
             clipApp, 
             unetApp, 
             vaeDecoderApp,
+            vaeEncoderApp,
             safetyCheckerApp,
             [&sink](int step, int total_steps) {
               nlohmann::json progress = {
@@ -1487,12 +1625,19 @@ int main(int argc, char **argv)
       auto decoded_buffer = std::vector<uint8_t>(decoded.begin(), decoded.end());
       std::vector<uint8_t> decoded_image;
       decode_image(decoded_buffer, decoded_image, output_size);
-      xt::xarray<uint8_t> img_xt = xt::adapt(decoded_image, {1, output_size, output_size, 3});
-      xt::xarray<float> img_data = xt::cast<float>(img_xt);
-      img_data = xt::eval(img_data / 255.0);
-      img_data = xt::transpose(img_data, {0, 3, 1, 2});
-      img_data = xt::eval(img_data * 2.0 - 1.0);
-      img_float_data = std::vector<float>(img_data.begin(), img_data.end());
+      if (decoded_image.size() != 3 * output_size * output_size)
+      {
+        img_float_data.clear();
+      }
+      else
+      {
+        xt::xarray<uint8_t> img_xt = xt::adapt(decoded_image, {1, output_size, output_size, 3});
+        xt::xarray<float> img_data = xt::cast<float>(img_xt);
+        img_data = xt::eval(img_data / 255.0);
+        img_data = xt::transpose(img_data, {0, 3, 1, 2});
+        img_data = xt::eval(img_data * 2.0 - 1.0);
+        img_float_data = std::vector<float>(img_data.begin(), img_data.end());
+      }
     }
     float denoise_strength = 0.6;
     if (json.contains("denoise_strength")) {
@@ -1509,6 +1654,7 @@ int main(int argc, char **argv)
     std::cout<<"use_cfg: "<<use_cfg<<std::endl;
     std::cout<<"seed: "<<seed<<std::endl;
     std::cout<<"size: "<<size<<std::endl;
+    std::cout<<"denoise_strength: "<<denoise_strength<<std::endl;
     
     std::string prompt = json["prompt"].get<std::string>();
     
@@ -1554,9 +1700,12 @@ int main(int argc, char **argv)
             cfg,
             use_cfg,
             seed,
+            img_float_data,
+            denoise_strength,
             clipApp.get(), 
             unetApp.get(), 
             vaeDecoderApp.get(),
+            vaeEncoderApp.get(),
             safetyCheckerApp,
             [&sink](int step, int total_steps) {
               nlohmann::json progress = {

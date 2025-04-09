@@ -209,6 +209,43 @@ fun ModelListScreen(
                         placeholder = { Text("https://your-mirror-site.com/") },
                         singleLine = true
                     )
+
+                    Spacer(modifier = Modifier.height(32.dp))
+                    Text(
+                        "Use img2img feature. Turn off if you don't need or encounter any problems.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "Use img2img",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        val preferences = LocalContext.current.getSharedPreferences(
+                            "app_prefs",
+                            Context.MODE_PRIVATE
+                        )
+                        var useImg2img by remember {
+                            mutableStateOf(preferences.getBoolean("use_img2img", true).also {
+                                if (!preferences.contains("use_img2img")) {
+                                    preferences.edit { putBoolean("use_img2img", true) }
+                                }
+                            })
+                        }
+                        Switch(
+                            checked = useImg2img,
+                            onCheckedChange = {
+                                useImg2img = it
+                                preferences.edit {
+                                    putBoolean("use_img2img", it)
+                                }
+                            }
+                        )
+                    }
                 }
             },
             confirmButton = {

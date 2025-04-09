@@ -103,7 +103,6 @@ inline std::string base64_decode(const std::string &in)
 
   if (!initialized)
   {
-    // 初始化查找表
     lookup.fill(-1);
     for (int i = 0; i < 64; i++)
     {
@@ -115,7 +114,6 @@ inline std::string base64_decode(const std::string &in)
   size_t in_len = in.size();
   if (in_len % 4 != 0)
   {
-    // Base64 字符串长度应该是4的倍数
     throw std::runtime_error("Invalid base64 length");
   }
 
@@ -133,14 +131,12 @@ inline std::string base64_decode(const std::string &in)
   {
     if (c == '=')
     {
-      // 跳过填充字符
       continue;
     }
 
     int idx = lookup[static_cast<unsigned char>(c)];
     if (idx == -1)
     {
-      // 跳过非 Base64 字符
       continue;
     }
 
@@ -311,13 +307,15 @@ void decode_image(const std::vector<uint8_t> &image_binary,
 
   if (!decoded_data)
   {
-    std::string error_msg = stbi_failure_reason(); // 获取具体错误原因
+    std::string error_msg = stbi_failure_reason();
     std::cout << "Error decoding image: " << error_msg << std::endl;
-    throw std::runtime_error("Failed to decode image: " + error_msg);
+    output_pixels.clear();
+    return;
+    // throw std::runtime_error("Failed to decode image: " + error_msg);
   }
 
   // Determine the scale and crop dimensions to maintain aspect ratio
-  float scale = std::min(
+  float scale = std::max(
       static_cast<float>(output_size) / width,
       static_cast<float>(output_size) / height);
 

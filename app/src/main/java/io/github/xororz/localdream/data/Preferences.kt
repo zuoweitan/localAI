@@ -20,6 +20,9 @@ class GenerationPreferences(private val context: Context) {
     private fun getCfgKey(modelId: String) = floatPreferencesKey("${modelId}_cfg")
     private fun getSeedKey(modelId: String) = stringPreferencesKey("${modelId}_seed")
     private fun getSizeKey(modelId: String) = intPreferencesKey("${modelId}_size")
+    private fun getDenoiseStrengthKey(modelId: String) =
+        floatPreferencesKey("${modelId}_denoise_strength")
+
     private val BASE_URL_KEY = stringPreferencesKey("base_url")
 
     suspend fun saveBaseUrl(url: String) {
@@ -71,6 +74,12 @@ class GenerationPreferences(private val context: Context) {
         }
     }
 
+    suspend fun saveDenoiseStrength(modelId: String, denoiseStrength: Float) {
+        context.dataStore.edit { preferences ->
+            preferences[getDenoiseStrengthKey(modelId)] = denoiseStrength
+        }
+    }
+
     fun getPreferences(modelId: String): Flow<GenerationPrefs> {
         return context.dataStore.data
             .catch { exception ->
@@ -87,7 +96,8 @@ class GenerationPreferences(private val context: Context) {
                     steps = preferences[getStepsKey(modelId)] ?: 20f,
                     cfg = preferences[getCfgKey(modelId)] ?: 7f,
                     seed = preferences[getSeedKey(modelId)] ?: "",
-                    size = preferences[getSizeKey(modelId)] ?: 256
+                    size = preferences[getSizeKey(modelId)] ?: 256,
+                    denoiseStrength = preferences[getDenoiseStrengthKey(modelId)] ?: 0.6f
                 )
             }
     }
@@ -99,5 +109,6 @@ data class GenerationPrefs(
     val steps: Float = 20f,
     val cfg: Float = 7f,
     val seed: String = "",
-    val size: Int = 512
+    val size: Int = 512,
+    val denoiseStrength: Float = 0.6f
 )

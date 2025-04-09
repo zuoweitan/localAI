@@ -219,6 +219,11 @@ class ModelRepository(private val context: Context) {
                     "xororz/AnythingV5/resolve/main/clip_fp16.mnn"
                 ),
                 ModelFile(
+                    "vae_encoder.bin",
+                    "vae_encoder",
+                    "xororz/AnythingV5/resolve/main/vae_encoder_${chipsetModelSuffixes[soc]}.bin"
+                ),
+                ModelFile(
                     "vae_decoder.bin",
                     "vae_decoder",
                     "xororz/AnythingV5/resolve/main/vae_decoder_${chipsetModelSuffixes[soc]}.bin"
@@ -237,11 +242,12 @@ class ModelRepository(private val context: Context) {
                     ModelFile("tokenizer.json", "", ""),
                     ModelFile("clip.mnn", "", ""),
                     ModelFile("vae_decoder.bin", "", ""),
+                    ModelFile("vae_encoder.bin", "", ""),
                     ModelFile("unet.bin", "", "")
                 )
             ),
             defaultPrompt = "masterpiece, best quality, 1girl, solo, cute, white hair,",
-            defaultNegativePrompt = "badhandv4, easynegative, bad anatomy, bad hands, missing fingers, extra fingers, bad arms, missing legs, missing arms, poorly drawn face, bad face, fused face, cloned face, three crus, fused feet, fused thigh, extra crus, ugly fingers, horn, realistic photo, huge eyes, worst face, 2girl, long fingers, disconnected limbs,",
+            defaultNegativePrompt = "bad anatomy, bad hands, missing fingers, extra fingers, bad arms, missing legs, missing arms, poorly drawn face, bad face, fused face, cloned face, three crus, fused feet, fused thigh, extra crus, ugly fingers, horn, realistic photo, huge eyes, worst face, 2girl, long fingers, disconnected limbs,",
             useCpuClip = true
         )
     }
@@ -261,6 +267,11 @@ class ModelRepository(private val context: Context) {
                 ),
                 ModelFile("clip.mnn", "clip", "xororz/AnythingV5/resolve/main/clip_fp16.mnn"),
                 ModelFile(
+                    "vae_encoder.mnn",
+                    "vae_encoder",
+                    "xororz/AnythingV5/resolve/main/vae_encoder_fp16.mnn"
+                ),
+                ModelFile(
                     "vae_decoder.mnn",
                     "vae_decoder",
                     "xororz/AnythingV5/resolve/main/vae_decoder_fp16.mnn"
@@ -278,12 +289,13 @@ class ModelRepository(private val context: Context) {
                 listOf(
                     ModelFile("tokenizer.json", "", ""),
                     ModelFile("clip.mnn", "", ""),
+                    ModelFile("vae_encoder.mnn", "", ""),
                     ModelFile("vae_decoder.mnn", "", ""),
                     ModelFile("unet.mnn", "", "")
                 )
             ),
             defaultPrompt = "masterpiece, best quality, 1girl, solo, cute, white hair,",
-            defaultNegativePrompt = "badhandv4, easynegative, bad anatomy, bad hands, missing fingers, extra fingers, bad arms, missing legs, missing arms, poorly drawn face, bad face, fused face, cloned face, three crus, fused feet, fused thigh, extra crus, ugly fingers, horn, realistic photo, huge eyes, worst face, 2girl, long fingers, disconnected limbs,",
+            defaultNegativePrompt = "bad anatomy, bad hands, missing fingers, extra fingers, bad arms, missing legs, missing arms, poorly drawn face, bad face, fused face, cloned face, three crus, fused feet, fused thigh, extra crus, ugly fingers, horn, realistic photo, huge eyes, worst face, 2girl, long fingers, disconnected limbs,",
             runOnCpu = true
         )
     }
@@ -304,6 +316,11 @@ class ModelRepository(private val context: Context) {
                 ),
                 ModelFile("clip.mnn", "clip", "xororz/AbsoluteReality/resolve/main/clip_fp16.mnn"),
                 ModelFile(
+                    "vae_encoder.bin",
+                    "vae_encoder",
+                    "xororz/AnythingV5/resolve/main/vae_encoder_${chipsetModelSuffixes[soc]}.bin"
+                ),
+                ModelFile(
                     "vae_decoder.bin",
                     "vae_decoder",
                     "xororz/AbsoluteReality/resolve/main/vae_decoder_${chipsetModelSuffixes[soc]}.bin"
@@ -321,16 +338,18 @@ class ModelRepository(private val context: Context) {
                 listOf(
                     ModelFile("tokenizer.json", "", ""),
                     ModelFile("clip.mnn", "", ""),
+                    ModelFile("vae_encoder.bin", "", ""),
                     ModelFile("vae_decoder.bin", "", ""),
                     ModelFile("unet.bin", "", "")
                 )
             ),
-            defaultPrompt = "best quality, realistic, a cat on grass,",
-            defaultNegativePrompt = "worst quality, low quality, normal quality, lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry, artist name",
+            defaultPrompt = "masterpiece, best quality, ultra-detailed, realistic, 8k, a cat on grass,",
+            defaultNegativePrompt = "Realisian-Neg, BadDream, negative_hand, NegfeetV2, worst quality, low quality, normal quality, poorly drawn, lowres, low resolution, signature, watermarks, ugly, out of focus, error, blurry, unclear photo, bad photo, unrealistic, semi realistic, pixelated, cartoon, anime, cgi, drawing, 2d, 3d, censored, duplicate,",
             runOnCpu = false,
             useCpuClip = true
         )
     }
+
     private fun createAbsoluteRealityModelCPU(): Model {
         val id = "absoluterealitycpu"
         return Model(
@@ -345,6 +364,11 @@ class ModelRepository(private val context: Context) {
                     "xororz/AbsoluteReality/resolve/main/tokenizer.json"
                 ),
                 ModelFile("clip.mnn", "clip", "xororz/AbsoluteReality/resolve/main/clip_fp16.mnn"),
+                ModelFile(
+                    "vae_encoder.mnn",
+                    "vae_encoder",
+                    "xororz/AnythingV5/resolve/main/vae_encoder_fp16.mnn"
+                ),
                 ModelFile(
                     "vae_decoder.mnn",
                     "vae_decoder",
@@ -363,6 +387,7 @@ class ModelRepository(private val context: Context) {
                 listOf(
                     ModelFile("tokenizer.json", "", ""),
                     ModelFile("clip.mnn", "", ""),
+                    ModelFile("vae_encoder.mnn", "", ""),
                     ModelFile("vae_decoder.mnn", "", ""),
                     ModelFile("unet.mnn", "", "")
                 )
@@ -372,6 +397,7 @@ class ModelRepository(private val context: Context) {
             runOnCpu = true
         )
     }
+
     private fun createChilloutMixModel(): Model {
         val id = "chilloutmix"
         val soc = getDeviceSoc()
@@ -387,6 +413,11 @@ class ModelRepository(private val context: Context) {
                     "xororz/ChilloutMix/resolve/main/tokenizer.json"
                 ),
                 ModelFile("clip.mnn", "clip", "xororz/ChilloutMix/resolve/main/clip_fp16.mnn"),
+                ModelFile(
+                    "vae_encoder.bin",
+                    "vae_encoder",
+                    "xororz/AnythingV5/resolve/main/vae_encoder_${chipsetModelSuffixes[soc]}.bin"
+                ),
                 ModelFile(
                     "vae_decoder.bin",
                     "vae_decoder",
@@ -405,6 +436,7 @@ class ModelRepository(private val context: Context) {
                 listOf(
                     ModelFile("tokenizer.json", "", ""),
                     ModelFile("clip.mnn", "", ""),
+                    ModelFile("vae_encoder.bin", "", ""),
                     ModelFile("vae_decoder.bin", "", ""),
                     ModelFile("unet.bin", "", "")
                 )
@@ -415,6 +447,7 @@ class ModelRepository(private val context: Context) {
             useCpuClip = true,
         )
     }
+
     private fun createChilloutMixModelCPU(): Model {
         val id = "chilloutmixcpu"
         return Model(
@@ -429,6 +462,11 @@ class ModelRepository(private val context: Context) {
                     "xororz/ChilloutMix/resolve/main/tokenizer.json"
                 ),
                 ModelFile("clip.mnn", "clip", "xororz/ChilloutMix/resolve/main/clip_fp16.mnn"),
+                ModelFile(
+                    "vae_encoder.mnn",
+                    "vae_encoder",
+                    "xororz/AnythingV5/resolve/main/vae_encoder_fp16.mnn"
+                ),
                 ModelFile(
                     "vae_decoder.mnn",
                     "vae_decoder",
@@ -447,6 +485,7 @@ class ModelRepository(private val context: Context) {
                 listOf(
                     ModelFile("tokenizer.json", "", ""),
                     ModelFile("clip.mnn", "", ""),
+                    ModelFile("vae_encoder.mnn", "", ""),
                     ModelFile("vae_decoder.mnn", "", ""),
                     ModelFile("unet.mnn", "", "")
                 )
@@ -456,6 +495,7 @@ class ModelRepository(private val context: Context) {
             runOnCpu = true
         )
     }
+
     private fun createSD21Model(): Model {
         val id = "sd21"
         val soc = getDeviceSoc()
@@ -470,6 +510,11 @@ class ModelRepository(private val context: Context) {
                     "clip.bin",
                     "clip",
                     "xororz/SD21/resolve/main/clip_${chipsetModelSuffixes[soc]}.bin"
+                ),
+                ModelFile(
+                    "vae_encoder.bin",
+                    "vae_encoder",
+                    "xororz/AnythingV5/resolve/main/vae_encoder_${chipsetModelSuffixes[soc]}.bin"
                 ),
                 ModelFile(
                     "vae_decoder.bin",
@@ -490,6 +535,7 @@ class ModelRepository(private val context: Context) {
                 listOf(
                     ModelFile("tokenizer.json", "", ""),
                     ModelFile("clip.bin", "", ""),
+                    ModelFile("vae_encoder.bin", "", ""),
                     ModelFile("vae_decoder.bin", "", ""),
                     ModelFile("unet.bin", "", "")
                 )
@@ -519,6 +565,11 @@ class ModelRepository(private val context: Context) {
                     "xororz/PonyV55/resolve/main/clip_${chipsetModelSuffixes[soc]}.bin"
                 ),
                 ModelFile(
+                    "vae_encoder.bin",
+                    "vae_encoder",
+                    "xororz/PonyV55/resolve/main/vae_encoder_${chipsetModelSuffixes[soc]}.bin"
+                ),
+                ModelFile(
                     "vae_decoder.bin",
                     "vae_decoder",
                     "xororz/PonyV55/resolve/main/vae_decoder_${chipsetModelSuffixes[soc]}.bin"
@@ -538,6 +589,7 @@ class ModelRepository(private val context: Context) {
                 listOf(
                     ModelFile("tokenizer.json", "", ""),
                     ModelFile("clip.bin", "", ""),
+                    ModelFile("vae_encoder.bin", "", ""),
                     ModelFile("vae_decoder.bin", "", ""),
                     ModelFile("unet.bin", "", "")
                 )
