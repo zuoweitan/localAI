@@ -440,26 +440,10 @@ fun ModelRunScreen(
 
     fun onSelectImageClick() {
         when {
-            // Android 14+
-            Build.VERSION.SDK_INT >= 34 -> {
+            // Android 13+
+            Build.VERSION.SDK_INT >= 33 -> {
                 // PhotoPicker API
                 photoPickerLauncher.launch(PickVisualMediaRequest(PickVisualMedia.ImageOnly))
-            }
-
-            // Android 13
-            Build.VERSION.SDK_INT >= 33 -> {
-                when {
-                    ContextCompat.checkSelfPermission(
-                        context,
-                        Manifest.permission.READ_MEDIA_IMAGES
-                    ) == PackageManager.PERMISSION_GRANTED -> {
-                        contentPickerLauncher.launch("image/*")
-                    }
-
-                    else -> {
-                        requestMediaImagePermissionLauncher.launch(Manifest.permission.READ_MEDIA_IMAGES)
-                    }
-                }
             }
 
             // Android 12-
