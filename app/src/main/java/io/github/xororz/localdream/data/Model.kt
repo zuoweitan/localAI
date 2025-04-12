@@ -65,6 +65,7 @@ data class Model(
     val textEmbeddingSize: Int = 768,
     val approximateSize: String = "1GB",
     val isDownloaded: Boolean = false,
+    val isPartiallyDownloaded: Boolean = false,
     val defaultPrompt: String = "",
     val defaultNegativePrompt: String = "",
     val runOnCpu: Boolean = false,
@@ -131,19 +132,34 @@ data class Model(
             }
         }
 
-        fun checkModelExists(context: Context, modelId: String, files: List<ModelFile>): Boolean {
+        fun checkModelDownloadStatus(context: Context, modelId: String, files: List<ModelFile>): Pair<Boolean, Boolean> {
             val modelDir = File(getModelsDir(context), modelId)
             val fileVerification = FileVerification(context)
 
-            return runBlocking {
+            var existingFilesCount = 0
+            val totalFilesCount = files.size
+
+            val fullyDownloaded = runBlocking {
                 files.all { modelFile ->
                     val file = File(modelDir, modelFile.name)
-                    if (!file.exists()) return@all false
-
-                    val savedSize = fileVerification.getFileSize(modelId, modelFile.name)
-                    savedSize != null && file.length() == savedSize
+                    if (file.exists()) {
+                        existingFilesCount++
+                        val savedSize = fileVerification.getFileSize(modelId, modelFile.name)
+                        savedSize != null && file.length() == savedSize
+                    } else {
+                        false
+                    }
                 }
             }
+
+            val partiallyDownloaded = existingFilesCount > 0 && existingFilesCount < totalFilesCount
+
+            return Pair(fullyDownloaded, partiallyDownloaded)
+        }
+
+        fun checkModelExists(context: Context, modelId: String, files: List<ModelFile>): Boolean {
+            val (fullyDownloaded, _) = checkModelDownloadStatus(context, modelId, files)
+            return fullyDownloaded
         }
     }
 }
@@ -180,72 +196,70 @@ class ModelRepository(private val context: Context) {
             return listOf(
                 createAnythingV5Model(),
                 createAnythingV5ModelCPU(),
-                createChilloutMixModelCPU(),
-                createChilloutMixModel(),
                 createAbsoluteRealityModel(),
                 createAbsoluteRealityModelCPU(),
+                createChilloutMixModelCPU(),
+                createChilloutMixModel(),
                 createSD21Model(),
             )
         }
         return listOf(
             createAnythingV5Model(),
             createAnythingV5ModelCPU(),
-            createChilloutMixModelCPU(),
-            createChilloutMixModel(),
             createAbsoluteRealityModel(),
             createAbsoluteRealityModelCPU(),
+            createChilloutMixModelCPU(),
+            createChilloutMixModel(),
             createPonyV55Model(),
             createSD21Model(),
         )
     }
-
     private fun createAnythingV5Model(): Model {
         val id = "anythingv5"
         val soc = getDeviceSoc()
+        val files = listOf(
+            ModelFile(
+                "tokenizer.json",
+                "tokenizer",
+                "xororz/AnythingV5/resolve/main/tokenizer.json"
+            ),
+            ModelFile(
+                "clip.mnn",
+                "clip",
+                "xororz/AnythingV5/resolve/main/clip_fp16.mnn"
+            ),
+            ModelFile(
+                "vae_encoder.bin",
+                "vae_encoder",
+                "xororz/AnythingV5/resolve/main/vae_encoder_${chipsetModelSuffixes[soc]}.bin"
+            ),
+            ModelFile(
+                "vae_decoder.bin",
+                "vae_decoder",
+                "xororz/AnythingV5/resolve/main/vae_decoder_${chipsetModelSuffixes[soc]}.bin"
+            ),
+            ModelFile(
+                "unet.bin",
+                "unet",
+                "xororz/AnythingV5/resolve/main/unet_${chipsetModelSuffixes[soc]}.bin"
+            )
+        )
+
+        val (fullyDownloaded, partiallyDownloaded) = Model.checkModelDownloadStatus(
+            context,
+            id,
+            files
+        )
+
         return Model(
             id = id,
             name = "Anything V5.0",
             description = context.getString(R.string.anythingv5_description),
             baseUrl = baseUrl,
-            files = listOf(
-                ModelFile(
-                    "tokenizer.json",
-                    "tokenizer",
-                    "xororz/AnythingV5/resolve/main/tokenizer.json"
-                ),
-                ModelFile(
-                    "clip.mnn",
-                    "clip",
-                    "xororz/AnythingV5/resolve/main/clip_fp16.mnn"
-                ),
-                ModelFile(
-                    "vae_encoder.bin",
-                    "vae_encoder",
-                    "xororz/AnythingV5/resolve/main/vae_encoder_${chipsetModelSuffixes[soc]}.bin"
-                ),
-                ModelFile(
-                    "vae_decoder.bin",
-                    "vae_decoder",
-                    "xororz/AnythingV5/resolve/main/vae_decoder_${chipsetModelSuffixes[soc]}.bin"
-                ),
-                ModelFile(
-                    "unet.bin",
-                    "unet",
-                    "xororz/AnythingV5/resolve/main/unet_${chipsetModelSuffixes[soc]}.bin"
-                )
-            ),
+            files = files,
             approximateSize = "1.1GB",
-            isDownloaded = Model.checkModelExists(
-                context,
-                id,
-                listOf(
-                    ModelFile("tokenizer.json", "", ""),
-                    ModelFile("clip.mnn", "", ""),
-                    ModelFile("vae_decoder.bin", "", ""),
-                    ModelFile("vae_encoder.bin", "", ""),
-                    ModelFile("unet.bin", "", "")
-                )
-            ),
+            isDownloaded = fullyDownloaded,
+            isPartiallyDownloaded = partiallyDownloaded,
             defaultPrompt = "masterpiece, best quality, 1girl, solo, cute, white hair,",
             defaultNegativePrompt = "bad anatomy, bad hands, missing fingers, extra fingers, bad arms, missing legs, missing arms, poorly drawn face, bad face, fused face, cloned face, three crus, fused feet, fused thigh, extra crus, ugly fingers, horn, realistic photo, huge eyes, worst face, 2girl, long fingers, disconnected limbs,",
             useCpuClip = true
@@ -254,46 +268,45 @@ class ModelRepository(private val context: Context) {
 
     private fun createAnythingV5ModelCPU(): Model {
         val id = "anythingv5cpu"
+        val files = listOf(
+            ModelFile(
+                "tokenizer.json",
+                "tokenizer",
+                "xororz/AnythingV5/resolve/main/tokenizer.json"
+            ),
+            ModelFile("clip.mnn", "clip", "xororz/AnythingV5/resolve/main/clip_fp16.mnn"),
+            ModelFile(
+                "vae_encoder.mnn",
+                "vae_encoder",
+                "xororz/AnythingV5/resolve/main/vae_encoder_fp16.mnn"
+            ),
+            ModelFile(
+                "vae_decoder.mnn",
+                "vae_decoder",
+                "xororz/AnythingV5/resolve/main/vae_decoder_fp16.mnn"
+            ),
+            ModelFile(
+                "unet.mnn",
+                "unet",
+                "xororz/AnythingV5/resolve/main/unet_asym_block32.mnn"
+            )
+        )
+
+        val (fullyDownloaded, partiallyDownloaded) = Model.checkModelDownloadStatus(
+            context,
+            id,
+            files
+        )
+
         return Model(
             id = id,
             name = "Anything V5.0",
             description = context.getString(R.string.anythingv5_description),
             baseUrl = baseUrl,
-            files = listOf(
-                ModelFile(
-                    "tokenizer.json",
-                    "tokenizer",
-                    "xororz/AnythingV5/resolve/main/tokenizer.json"
-                ),
-                ModelFile("clip.mnn", "clip", "xororz/AnythingV5/resolve/main/clip_fp16.mnn"),
-                ModelFile(
-                    "vae_encoder.mnn",
-                    "vae_encoder",
-                    "xororz/AnythingV5/resolve/main/vae_encoder_fp16.mnn"
-                ),
-                ModelFile(
-                    "vae_decoder.mnn",
-                    "vae_decoder",
-                    "xororz/AnythingV5/resolve/main/vae_decoder_fp16.mnn"
-                ),
-                ModelFile(
-                    "unet.mnn",
-                    "unet",
-                    "xororz/AnythingV5/resolve/main/unet_asym_block32.mnn"
-                )
-            ),
+            files = files,
             approximateSize = "1.2GB",
-            isDownloaded = Model.checkModelExists(
-                context,
-                id,
-                listOf(
-                    ModelFile("tokenizer.json", "", ""),
-                    ModelFile("clip.mnn", "", ""),
-                    ModelFile("vae_encoder.mnn", "", ""),
-                    ModelFile("vae_decoder.mnn", "", ""),
-                    ModelFile("unet.mnn", "", "")
-                )
-            ),
+            isDownloaded = fullyDownloaded,
+            isPartiallyDownloaded = partiallyDownloaded,
             defaultPrompt = "masterpiece, best quality, 1girl, solo, cute, white hair,",
             defaultNegativePrompt = "bad anatomy, bad hands, missing fingers, extra fingers, bad arms, missing legs, missing arms, poorly drawn face, bad face, fused face, cloned face, three crus, fused feet, fused thigh, extra crus, ugly fingers, horn, realistic photo, huge eyes, worst face, 2girl, long fingers, disconnected limbs,",
             runOnCpu = true
@@ -303,48 +316,47 @@ class ModelRepository(private val context: Context) {
     private fun createAbsoluteRealityModel(): Model {
         val id = "absolutereality"
         val soc = getDeviceSoc()
+        val files = listOf(
+            ModelFile(
+                "tokenizer.json",
+                "tokenizer",
+                "xororz/AbsoluteReality/resolve/main/tokenizer.json"
+            ),
+            ModelFile("clip.mnn", "clip", "xororz/AbsoluteReality/resolve/main/clip_fp16.mnn"),
+            ModelFile(
+                "vae_encoder.bin",
+                "vae_encoder",
+                "xororz/AnythingV5/resolve/main/vae_encoder_${chipsetModelSuffixes[soc]}.bin"
+            ),
+            ModelFile(
+                "vae_decoder.bin",
+                "vae_decoder",
+                "xororz/AbsoluteReality/resolve/main/vae_decoder_${chipsetModelSuffixes[soc]}.bin"
+            ),
+            ModelFile(
+                "unet.bin",
+                "unet",
+                "xororz/AbsoluteReality/resolve/main/unet_${chipsetModelSuffixes[soc]}.bin"
+            )
+        )
+
+        val (fullyDownloaded, partiallyDownloaded) = Model.checkModelDownloadStatus(
+            context,
+            id,
+            files
+        )
+
         return Model(
             id = id,
             name = "Absolute Reality",
             description = context.getString(R.string.absolutereality_description),
             baseUrl = baseUrl,
-            files = listOf(
-                ModelFile(
-                    "tokenizer.json",
-                    "tokenizer",
-                    "xororz/AbsoluteReality/resolve/main/tokenizer.json"
-                ),
-                ModelFile("clip.mnn", "clip", "xororz/AbsoluteReality/resolve/main/clip_fp16.mnn"),
-                ModelFile(
-                    "vae_encoder.bin",
-                    "vae_encoder",
-                    "xororz/AnythingV5/resolve/main/vae_encoder_${chipsetModelSuffixes[soc]}.bin"
-                ),
-                ModelFile(
-                    "vae_decoder.bin",
-                    "vae_decoder",
-                    "xororz/AbsoluteReality/resolve/main/vae_decoder_${chipsetModelSuffixes[soc]}.bin"
-                ),
-                ModelFile(
-                    "unet.bin",
-                    "unet",
-                    "xororz/AbsoluteReality/resolve/main/unet_${chipsetModelSuffixes[soc]}.bin"
-                )
-            ),
+            files = files,
             approximateSize = "1.1GB",
-            isDownloaded = Model.checkModelExists(
-                context,
-                id,
-                listOf(
-                    ModelFile("tokenizer.json", "", ""),
-                    ModelFile("clip.mnn", "", ""),
-                    ModelFile("vae_encoder.bin", "", ""),
-                    ModelFile("vae_decoder.bin", "", ""),
-                    ModelFile("unet.bin", "", "")
-                )
-            ),
+            isDownloaded = fullyDownloaded,
+            isPartiallyDownloaded = partiallyDownloaded,
             defaultPrompt = "masterpiece, best quality, ultra-detailed, realistic, 8k, a cat on grass,",
-            defaultNegativePrompt = "Realisian-Neg, BadDream, negative_hand, NegfeetV2, worst quality, low quality, normal quality, poorly drawn, lowres, low resolution, signature, watermarks, ugly, out of focus, error, blurry, unclear photo, bad photo, unrealistic, semi realistic, pixelated, cartoon, anime, cgi, drawing, 2d, 3d, censored, duplicate,",
+            defaultNegativePrompt = "worst quality, low quality, normal quality, poorly drawn, lowres, low resolution, signature, watermarks, ugly, out of focus, error, blurry, unclear photo, bad photo, unrealistic, semi realistic, pixelated, cartoon, anime, cgi, drawing, 2d, 3d, censored, duplicate,",
             runOnCpu = false,
             useCpuClip = true
         )
@@ -352,48 +364,47 @@ class ModelRepository(private val context: Context) {
 
     private fun createAbsoluteRealityModelCPU(): Model {
         val id = "absoluterealitycpu"
+        val files = listOf(
+            ModelFile(
+                "tokenizer.json",
+                "tokenizer",
+                "xororz/AbsoluteReality/resolve/main/tokenizer.json"
+            ),
+            ModelFile("clip.mnn", "clip", "xororz/AbsoluteReality/resolve/main/clip_fp16.mnn"),
+            ModelFile(
+                "vae_encoder.mnn",
+                "vae_encoder",
+                "xororz/AnythingV5/resolve/main/vae_encoder_fp16.mnn"
+            ),
+            ModelFile(
+                "vae_decoder.mnn",
+                "vae_decoder",
+                "xororz/AbsoluteReality/resolve/main/vae_decoder_fp16.mnn"
+            ),
+            ModelFile(
+                "unet.mnn",
+                "unet",
+                "xororz/AbsoluteReality/resolve/main/unet_asym_block32.mnn"
+            )
+        )
+
+        val (fullyDownloaded, partiallyDownloaded) = Model.checkModelDownloadStatus(
+            context,
+            id,
+            files
+        )
+
         return Model(
             id = id,
             name = "Absolute Reality",
             description = context.getString(R.string.absolutereality_description),
             baseUrl = baseUrl,
-            files = listOf(
-                ModelFile(
-                    "tokenizer.json",
-                    "tokenizer",
-                    "xororz/AbsoluteReality/resolve/main/tokenizer.json"
-                ),
-                ModelFile("clip.mnn", "clip", "xororz/AbsoluteReality/resolve/main/clip_fp16.mnn"),
-                ModelFile(
-                    "vae_encoder.mnn",
-                    "vae_encoder",
-                    "xororz/AnythingV5/resolve/main/vae_encoder_fp16.mnn"
-                ),
-                ModelFile(
-                    "vae_decoder.mnn",
-                    "vae_decoder",
-                    "xororz/AbsoluteReality/resolve/main/vae_decoder_fp16.mnn"
-                ),
-                ModelFile(
-                    "unet.mnn",
-                    "unet",
-                    "xororz/AbsoluteReality/resolve/main/unet_asym_block32.mnn"
-                )
-            ),
+            files = files,
             approximateSize = "1.2GB",
-            isDownloaded = Model.checkModelExists(
-                context,
-                id,
-                listOf(
-                    ModelFile("tokenizer.json", "", ""),
-                    ModelFile("clip.mnn", "", ""),
-                    ModelFile("vae_encoder.mnn", "", ""),
-                    ModelFile("vae_decoder.mnn", "", ""),
-                    ModelFile("unet.mnn", "", "")
-                )
-            ),
+            isDownloaded = fullyDownloaded,
+            isPartiallyDownloaded = partiallyDownloaded,
             defaultPrompt = "masterpiece, best quality, ultra-detailed, realistic, 8k, a cat on grass,",
-            defaultNegativePrompt = "Realisian-Neg, BadDream, negative_hand, NegfeetV2, worst quality, low quality, normal quality, poorly drawn, lowres, low resolution, signature, watermarks, ugly, out of focus, error, blurry, unclear photo, bad photo, unrealistic, semi realistic, pixelated, cartoon, anime, cgi, drawing, 2d, 3d, censored, duplicate,",
+            defaultNegativePrompt = "worst quality, low quality, normal quality, poorly drawn, lowres, low resolution, signature, watermarks, ugly, out of focus, error, blurry, unclear photo, bad photo, unrealistic, semi realistic, pixelated, cartoon, anime, cgi, drawing, 2d, 3d, censored, duplicate,",
             runOnCpu = true
         )
     }
@@ -401,46 +412,45 @@ class ModelRepository(private val context: Context) {
     private fun createChilloutMixModel(): Model {
         val id = "chilloutmix"
         val soc = getDeviceSoc()
+        val files = listOf(
+            ModelFile(
+                "tokenizer.json",
+                "tokenizer",
+                "xororz/ChilloutMix/resolve/main/tokenizer.json"
+            ),
+            ModelFile("clip.mnn", "clip", "xororz/ChilloutMix/resolve/main/clip_fp16.mnn"),
+            ModelFile(
+                "vae_encoder.bin",
+                "vae_encoder",
+                "xororz/AnythingV5/resolve/main/vae_encoder_${chipsetModelSuffixes[soc]}.bin"
+            ),
+            ModelFile(
+                "vae_decoder.bin",
+                "vae_decoder",
+                "xororz/ChilloutMix/resolve/main/vae_decoder_${chipsetModelSuffixes[soc]}.bin"
+            ),
+            ModelFile(
+                "unet.bin",
+                "unet",
+                "xororz/ChilloutMix/resolve/main/unet_${chipsetModelSuffixes[soc]}.bin"
+            )
+        )
+
+        val (fullyDownloaded, partiallyDownloaded) = Model.checkModelDownloadStatus(
+            context,
+            id,
+            files
+        )
+
         return Model(
             id = id,
             name = "ChilloutMix",
             description = context.getString(R.string.chilloutmix_description),
             baseUrl = baseUrl,
-            files = listOf(
-                ModelFile(
-                    "tokenizer.json",
-                    "tokenizer",
-                    "xororz/ChilloutMix/resolve/main/tokenizer.json"
-                ),
-                ModelFile("clip.mnn", "clip", "xororz/ChilloutMix/resolve/main/clip_fp16.mnn"),
-                ModelFile(
-                    "vae_encoder.bin",
-                    "vae_encoder",
-                    "xororz/AnythingV5/resolve/main/vae_encoder_${chipsetModelSuffixes[soc]}.bin"
-                ),
-                ModelFile(
-                    "vae_decoder.bin",
-                    "vae_decoder",
-                    "xororz/ChilloutMix/resolve/main/vae_decoder_${chipsetModelSuffixes[soc]}.bin"
-                ),
-                ModelFile(
-                    "unet.bin",
-                    "unet",
-                    "xororz/ChilloutMix/resolve/main/unet_${chipsetModelSuffixes[soc]}.bin"
-                )
-            ),
+            files = files,
             approximateSize = "1.1GB",
-            isDownloaded = Model.checkModelExists(
-                context,
-                id,
-                listOf(
-                    ModelFile("tokenizer.json", "", ""),
-                    ModelFile("clip.mnn", "", ""),
-                    ModelFile("vae_encoder.bin", "", ""),
-                    ModelFile("vae_decoder.bin", "", ""),
-                    ModelFile("unet.bin", "", "")
-                )
-            ),
+            isDownloaded = fullyDownloaded,
+            isPartiallyDownloaded = partiallyDownloaded,
             defaultPrompt = "RAW photo, best quality, realistic, photo-realistic, masterpiece, extremely detailed, CG, unity, 8k wallpaper, ultra-detailed, highres, absurdres, 1girl, silver hair,",
             defaultNegativePrompt = "paintings, sketches, worst quality, low quality, normal quality, lowres, monochrome, grayscale, skin spots, acnes, skin blemishes, age spot, bad anatomy, bad hands, bad body, bad proportions, gross proportions, extra fingers, fewer fingers, extra digit, missing fingers, fused fingers, extra arms, missing arms, extra legs, missing legs, extra limbs, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, blurry, watermark, white letters, signature, text, error, jpeg artifacts, duplicate, morbid, mutilated, cross-eyed, long neck, ng_deepnegative_v1_75t, easynegative, bad-picture-chill-75v, bad-artist",
             runOnCpu = false,
@@ -450,46 +460,45 @@ class ModelRepository(private val context: Context) {
 
     private fun createChilloutMixModelCPU(): Model {
         val id = "chilloutmixcpu"
+        val files = listOf(
+            ModelFile(
+                "tokenizer.json",
+                "tokenizer",
+                "xororz/ChilloutMix/resolve/main/tokenizer.json"
+            ),
+            ModelFile("clip.mnn", "clip", "xororz/ChilloutMix/resolve/main/clip_fp16.mnn"),
+            ModelFile(
+                "vae_encoder.mnn",
+                "vae_encoder",
+                "xororz/AnythingV5/resolve/main/vae_encoder_fp16.mnn"
+            ),
+            ModelFile(
+                "vae_decoder.mnn",
+                "vae_decoder",
+                "xororz/ChilloutMix/resolve/main/vae_decoder_fp16.mnn"
+            ),
+            ModelFile(
+                "unet.mnn",
+                "unet",
+                "xororz/ChilloutMix/resolve/main/unet_asym_block32.mnn"
+            )
+        )
+
+        val (fullyDownloaded, partiallyDownloaded) = Model.checkModelDownloadStatus(
+            context,
+            id,
+            files
+        )
+
         return Model(
             id = id,
             name = "ChilloutMix",
             description = context.getString(R.string.chilloutmix_description),
             baseUrl = baseUrl,
-            files = listOf(
-                ModelFile(
-                    "tokenizer.json",
-                    "tokenizer",
-                    "xororz/ChilloutMix/resolve/main/tokenizer.json"
-                ),
-                ModelFile("clip.mnn", "clip", "xororz/ChilloutMix/resolve/main/clip_fp16.mnn"),
-                ModelFile(
-                    "vae_encoder.mnn",
-                    "vae_encoder",
-                    "xororz/AnythingV5/resolve/main/vae_encoder_fp16.mnn"
-                ),
-                ModelFile(
-                    "vae_decoder.mnn",
-                    "vae_decoder",
-                    "xororz/ChilloutMix/resolve/main/vae_decoder_fp16.mnn"
-                ),
-                ModelFile(
-                    "unet.mnn",
-                    "unet",
-                    "xororz/ChilloutMix/resolve/main/unet_asym_block32.mnn"
-                )
-            ),
+            files = files,
             approximateSize = "1.2GB",
-            isDownloaded = Model.checkModelExists(
-                context,
-                id,
-                listOf(
-                    ModelFile("tokenizer.json", "", ""),
-                    ModelFile("clip.mnn", "", ""),
-                    ModelFile("vae_encoder.mnn", "", ""),
-                    ModelFile("vae_decoder.mnn", "", ""),
-                    ModelFile("unet.mnn", "", "")
-                )
-            ),
+            isDownloaded = fullyDownloaded,
+            isPartiallyDownloaded = partiallyDownloaded,
             defaultPrompt = "RAW photo, best quality, realistic, photo-realistic, masterpiece, extremely detailed, CG, unity, 8k wallpaper, ultra-detailed, highres, absurdres, 1girl, silver hair,",
             defaultNegativePrompt = "paintings, sketches, worst quality, low quality, normal quality, lowres, monochrome, grayscale, skin spots, acnes, skin blemishes, age spot, bad anatomy, bad hands, bad body, bad proportions, gross proportions, extra fingers, fewer fingers, extra digit, missing fingers, fused fingers, extra arms, missing arms, extra legs, missing legs, extra limbs, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, blurry, watermark, white letters, signature, text, error, jpeg artifacts, duplicate, morbid, mutilated, cross-eyed, long neck, ng_deepnegative_v1_75t, easynegative, bad-picture-chill-75v, bad-artist",
             runOnCpu = true
@@ -499,47 +508,46 @@ class ModelRepository(private val context: Context) {
     private fun createSD21Model(): Model {
         val id = "sd21"
         val soc = getDeviceSoc()
+        val files = listOf(
+            ModelFile("tokenizer.json", "tokenizer", "xororz/SD21/resolve/main/tokenizer.json"),
+            ModelFile(
+                "clip.bin",
+                "clip",
+                "xororz/SD21/resolve/main/clip_${chipsetModelSuffixes[soc]}.bin"
+            ),
+            ModelFile(
+                "vae_encoder.bin",
+                "vae_encoder",
+                "xororz/AnythingV5/resolve/main/vae_encoder_${chipsetModelSuffixes[soc]}.bin"
+            ),
+            ModelFile(
+                "vae_decoder.bin",
+                "vae_decoder",
+                "xororz/SD21/resolve/main/vae_decoder_${chipsetModelSuffixes[soc]}.bin"
+            ),
+            ModelFile(
+                "unet.bin",
+                "unet",
+                "xororz/SD21/resolve/main/unet_${chipsetModelSuffixes[soc]}.bin"
+            )
+        )
+
+        val (fullyDownloaded, partiallyDownloaded) = Model.checkModelDownloadStatus(
+            context,
+            id,
+            files
+        )
+
         return Model(
             id = id,
             name = "Stable Diffusion 2.1",
             description = context.getString(R.string.sd21_description),
             baseUrl = baseUrl,
-            files = listOf(
-                ModelFile("tokenizer.json", "tokenizer", "xororz/SD21/resolve/main/tokenizer.json"),
-                ModelFile(
-                    "clip.bin",
-                    "clip",
-                    "xororz/SD21/resolve/main/clip_${chipsetModelSuffixes[soc]}.bin"
-                ),
-                ModelFile(
-                    "vae_encoder.bin",
-                    "vae_encoder",
-                    "xororz/AnythingV5/resolve/main/vae_encoder_${chipsetModelSuffixes[soc]}.bin"
-                ),
-                ModelFile(
-                    "vae_decoder.bin",
-                    "vae_decoder",
-                    "xororz/SD21/resolve/main/vae_decoder_${chipsetModelSuffixes[soc]}.bin"
-                ),
-                ModelFile(
-                    "unet.bin",
-                    "unet",
-                    "xororz/SD21/resolve/main/unet_${chipsetModelSuffixes[soc]}.bin"
-                )
-            ),
+            files = files,
             textEmbeddingSize = 1024,
             approximateSize = "1.3GB",
-            isDownloaded = Model.checkModelExists(
-                context,
-                id,
-                listOf(
-                    ModelFile("tokenizer.json", "", ""),
-                    ModelFile("clip.bin", "", ""),
-                    ModelFile("vae_encoder.bin", "", ""),
-                    ModelFile("vae_decoder.bin", "", ""),
-                    ModelFile("unet.bin", "", "")
-                )
-            ),
+            isDownloaded = fullyDownloaded,
+            isPartiallyDownloaded = partiallyDownloaded,
             defaultPrompt = "a rabbit on grass,",
             defaultNegativePrompt = "lowres, bad anatomy, bad hands, missing fingers, extra digit, fewer fingers, cropped, worst quality, low quality, blur, simple background, mutation, deformed, ugly, duplicate, error, jpeg artifacts, watermark, username, blurry"
         )
@@ -548,52 +556,51 @@ class ModelRepository(private val context: Context) {
     private fun createPonyV55Model(): Model {
         val id = "ponyv55_640"
         val soc = getDeviceSoc()
+        val files = listOf(
+            ModelFile(
+                "tokenizer.json",
+                "tokenizer",
+                "xororz/PonyV55/resolve/main/tokenizer.json"
+            ),
+            ModelFile(
+                "clip.bin",
+                "clip",
+                "xororz/PonyV55/resolve/main/clip_${chipsetModelSuffixes[soc]}.bin"
+            ),
+            ModelFile(
+                "vae_encoder.bin",
+                "vae_encoder",
+                "xororz/PonyV55/resolve/main/vae_encoder_${chipsetModelSuffixes[soc]}.bin"
+            ),
+            ModelFile(
+                "vae_decoder.bin",
+                "vae_decoder",
+                "xororz/PonyV55/resolve/main/vae_decoder_${chipsetModelSuffixes[soc]}.bin"
+            ),
+            ModelFile(
+                "unet.bin",
+                "unet",
+                "xororz/PonyV55/resolve/main/unet_${chipsetModelSuffixes[soc]}.bin"
+            )
+        )
+
+        val (fullyDownloaded, partiallyDownloaded) = Model.checkModelDownloadStatus(
+            context,
+            id,
+            files
+        )
+
         return Model(
             id = id,
             name = "Pony V5.5",
             description = context.getString(R.string.ponyv55_description),
             baseUrl = baseUrl,
-            files = listOf(
-                ModelFile(
-                    "tokenizer.json",
-                    "tokenizer",
-                    "xororz/PonyV55/resolve/main/tokenizer.json"
-                ),
-                ModelFile(
-                    "clip.bin",
-                    "clip",
-                    "xororz/PonyV55/resolve/main/clip_${chipsetModelSuffixes[soc]}.bin"
-                ),
-                ModelFile(
-                    "vae_encoder.bin",
-                    "vae_encoder",
-                    "xororz/PonyV55/resolve/main/vae_encoder_${chipsetModelSuffixes[soc]}.bin"
-                ),
-                ModelFile(
-                    "vae_decoder.bin",
-                    "vae_decoder",
-                    "xororz/PonyV55/resolve/main/vae_decoder_${chipsetModelSuffixes[soc]}.bin"
-                ),
-                ModelFile(
-                    "unet.bin",
-                    "unet",
-                    "xororz/PonyV55/resolve/main/unet_${chipsetModelSuffixes[soc]}.bin"
-                )
-            ),
+            files = files,
             generationSize = 640,
             textEmbeddingSize = 1024,
             approximateSize = "1.3GB",
-            isDownloaded = Model.checkModelExists(
-                context,
-                id,
-                listOf(
-                    ModelFile("tokenizer.json", "", ""),
-                    ModelFile("clip.bin", "", ""),
-                    ModelFile("vae_encoder.bin", "", ""),
-                    ModelFile("vae_decoder.bin", "", ""),
-                    ModelFile("unet.bin", "", "")
-                )
-            ),
+            isDownloaded = fullyDownloaded,
+            isPartiallyDownloaded = partiallyDownloaded,
             defaultPrompt = "score_9, feral pony princess cadance swimming in a beautiful lake, reflections, night, moon and stars, solo",
             defaultNegativePrompt = "lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, jpeg artifacts, signature, watermark, username, blurry"
         )
@@ -602,8 +609,10 @@ class ModelRepository(private val context: Context) {
     fun refreshModelState(modelId: String) {
         models = models.map { model ->
             if (model.id == modelId) {
+                val (fullyDownloaded, partiallyDownloaded) = Model.checkModelDownloadStatus(context, modelId, model.files)
                 model.copy(
-                    isDownloaded = Model.checkModelExists(context, modelId, model.files)
+                    isDownloaded = fullyDownloaded,
+                    isPartiallyDownloaded = partiallyDownloaded
                 )
             } else {
                 model
@@ -613,8 +622,10 @@ class ModelRepository(private val context: Context) {
 
     fun refreshAllModels() {
         models = models.map { model ->
+            val (fullyDownloaded, partiallyDownloaded) = Model.checkModelDownloadStatus(context, model.id, model.files)
             model.copy(
-                isDownloaded = Model.checkModelExists(context, model.id, model.files)
+                isDownloaded = fullyDownloaded,
+                isPartiallyDownloaded = partiallyDownloaded
             )
         }
     }

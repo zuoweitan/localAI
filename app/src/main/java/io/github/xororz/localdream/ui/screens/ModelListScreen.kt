@@ -193,7 +193,7 @@ fun ModelListScreen(
     if (showSettingsDialog) {
         AlertDialog(
             onDismissRequest = { showSettingsDialog = false },
-            title = { Text(stringResource(R.string.download_settings)) },
+            title = { Text(stringResource(R.string.settings)) },
             text = {
                 Column {
                     Text(
@@ -324,7 +324,11 @@ fun ModelListScreen(
                 onDismissRequest = { showDownloadConfirm = null },
                 title = { Text(stringResource(R.string.download_model)) },
                 text = {
-                    Text(stringResource(R.string.download_model_hint, model.name))
+                    if (model.isPartiallyDownloaded) {
+                        Text(stringResource(R.string.continue_download_hint, model.name))
+                    } else {
+                        Text(stringResource(R.string.download_model_hint, model.name))
+                    }
                 },
                 confirmButton = {
                     TextButton(
@@ -480,7 +484,7 @@ fun ModelListScreen(
                                     return@ModelCard
                                 }
                                 if (isSelectionMode) {
-                                    if (model.isDownloaded) {
+                                    if (model.isDownloaded || model.isPartiallyDownloaded) {
                                         selectedModels = if (selectedModels.contains(model)) {
                                             selectedModels - model
                                         } else {
@@ -499,21 +503,22 @@ fun ModelListScreen(
                                         return@ModelCard
                                     }
 
-                                    val isModelDownloaded = Model.checkModelExists(
-                                        context,
-                                        model.id,
-                                        model.files
-                                    )
+                                    val isModelDownloaded = model.isDownloaded
+                                    val isModelPartiallyDownloaded = model.isPartiallyDownloaded
 
                                     if (!isModelDownloaded) {
-                                        showDownloadConfirm = model
+                                        if (isModelPartiallyDownloaded) {
+                                            showDownloadConfirm = model
+                                        } else {
+                                            showDownloadConfirm = model
+                                        }
                                     } else {
                                         navController.navigate(Screen.ModelRun.createRoute(model.id))
                                     }
                                 }
                             },
                             onLongClick = {
-                                if (model.isDownloaded && !isSelectionMode) {
+                                if ((model.isDownloaded || model.isPartiallyDownloaded) && !isSelectionMode) {
                                     isSelectionMode = true
                                     selectedModels = setOf(model)
                                 }
@@ -609,13 +614,13 @@ fun ModelCard(
     val containerColor = when {
         isSelected -> MaterialTheme.colorScheme.secondaryContainer
         isDownloading -> MaterialTheme.colorScheme.surfaceContainerLow
-        !model.isDownloaded && isSelectionMode -> MaterialTheme.colorScheme.surfaceContainerLow
+        !model.isDownloaded && !model.isPartiallyDownloaded && isSelectionMode -> MaterialTheme.colorScheme.surfaceContainerLow
         else -> MaterialTheme.colorScheme.surfaceContainerLowest
     }
 
     val contentColor = when {
         isSelected -> MaterialTheme.colorScheme.onSecondaryContainer
-        !model.isDownloaded && isSelectionMode -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+        !model.isDownloaded && !model.isPartiallyDownloaded && isSelectionMode -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
         else -> MaterialTheme.colorScheme.onSurface
     }
 
@@ -625,10 +630,10 @@ fun ModelCard(
             .pointerInput(isDownloading, isSelectionMode) {
                 detectTapGestures(
                     onLongPress = {
-                        if (model.isDownloaded && !isDownloading && !isSelectionMode) onLongClick()
+                        if ((model.isDownloaded || model.isPartiallyDownloaded) && !isDownloading && !isSelectionMode) onLongClick()
                     },
                     onTap = {
-                        if (!isSelectionMode || (isSelectionMode && model.isDownloaded)) {
+                        if (!isSelectionMode || (isSelectionMode && (model.isDownloaded || model.isPartiallyDownloaded))) {
                             onClick()
                         }
                     }
@@ -691,13 +696,23 @@ fun ModelCard(
                         style = MaterialTheme.typography.labelMedium,
                         color = contentColor.copy(alpha = 0.7f)
                     )
-                    if (model.isDownloaded) {
-                        Text(
-                            text = stringResource(R.string.downloaded),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Medium
-                        )
+                    when {
+                        model.isDownloaded -> {
+                            Text(
+                                text = stringResource(R.string.downloaded),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                        model.isPartiallyDownloaded -> {
+                            Text(
+                                text = stringResource(R.string.partially_downloaded),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.tertiary,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
                     }
                 }
 
