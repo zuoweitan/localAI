@@ -371,28 +371,60 @@ fun ModelRunScreen(
     val preferences = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
     val useImg2img = preferences.getBoolean("use_img2img", false)
 
+    var showCropScreen by remember { mutableStateOf(false) }
+    var imageUriForCrop by remember { mutableStateOf<Uri?>(null) }
+    var croppedBitmap by remember { mutableStateOf<Bitmap?>(null) }
+
+    var showInpaintScreen by remember { mutableStateOf(false) }
+    var maskBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var isInpaintMode by remember { mutableStateOf(false) }
+
     fun processSelectedImage(uri: Uri) {
-        selectedImageUri = uri
+        imageUriForCrop = uri
+        showCropScreen = true
+    }
+    fun handleCropComplete(base64String: String, bitmap: Bitmap) {
+        showCropScreen = false
+        selectedImageUri = imageUriForCrop
+        imageUriForCrop = null
+        croppedBitmap = bitmap
 
         scope.launch(Dispatchers.IO) {
             try {
-                val inputStream = context.contentResolver.openInputStream(uri)
-                val bytes = inputStream?.readBytes()
-                inputStream?.close()
+                base64EncodeDone = false
+                val tmpFile = File(context.filesDir, "tmp.txt")
+                tmpFile.writeText(base64String)
+                base64EncodeDone = true
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Save failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                    selectedImageUri = null
+                    croppedBitmap = null
+                }
+            }
+        }
+    }
+    fun handleInpaintComplete(maskBase64: String, originalBitmap: Bitmap, maskBmp: Bitmap) {
+        showInpaintScreen = false
+        isInpaintMode = true
+        maskBitmap = maskBmp
 
-                bytes?.let { imageBytes ->
-                    base64EncodeDone = false
-                    val base64String = Base64.getEncoder().encodeToString(imageBytes)
+        scope.launch(Dispatchers.IO) {
+            try {
+                val tmpFile = File(context.filesDir, "tmp.txt")
+                val originalBase64 = tmpFile.readText()
 
-                    val tmpFile = File(context.filesDir, "tmp.txt")
-                    tmpFile.writeText(base64String)
+                val maskFile = File(context.filesDir, "mask.txt")
+                maskFile.writeText(maskBase64)
 
+                withContext(Dispatchers.Main) {
                     base64EncodeDone = true
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(context, "read error: ${e.message}", Toast.LENGTH_SHORT).show()
-                    selectedImageUri = null
+                    Toast.makeText(context, "Save failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                    isInpaintMode = false
+                    maskBitmap = null
                 }
             }
         }
@@ -418,7 +450,7 @@ fun ModelRunScreen(
         } else {
             Toast.makeText(
                 context,
-                "Media permission is needed for img2img generation",
+                context.getString(R.string.media_permission_hint),
                 Toast.LENGTH_SHORT
             ).show()
         }
@@ -432,7 +464,7 @@ fun ModelRunScreen(
         } else {
             Toast.makeText(
                 context,
-                "Media permission is needed for img2img generation",
+                context.getString(R.string.media_permission_hint),
                 Toast.LENGTH_SHORT
             ).show()
         }
@@ -754,7 +786,7 @@ fun ModelRunScreen(
             onUnhealthy = {
                 isBackendReady = false
                 isCheckingBackend = false
-                errorMessage = "Backend start failed. Maybe your device is not supported."
+                errorMessage = context.getString(R.string.backend_failed)
             }
         )
     }
@@ -1315,6 +1347,9 @@ fun ModelRunScreen(
 
                                                     if (selectedImageUri != null && base64EncodeDone) {
                                                         putExtra("has_image", true)
+                                                        if (isInpaintMode && maskBitmap != null) {
+                                                            putExtra("has_mask", true)
+                                                        }
                                                     }
                                                 }
                                                 android.util.Log.d(
@@ -1417,43 +1452,130 @@ fun ModelRunScreen(
                                             .fillMaxWidth()
                                             .padding(vertical = 8.dp)
                                     ) {
-                                        Card(
-                                            modifier = Modifier
-                                                .size(100.dp)
-                                                .align(Alignment.CenterStart),
-                                            shape = RoundedCornerShape(8.dp),
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.Start
                                         ) {
-                                            Box {
-                                                selectedImageUri?.let { uri ->
-                                                    AsyncImage(
-                                                        model = ImageRequest.Builder(LocalContext.current)
-                                                            .data(uri)
-                                                            .crossfade(true)
-                                                            .build(),
-                                                        contentDescription = "selected image",
-                                                        modifier = Modifier.fillMaxSize()
-                                                    )
-                                                }
-
-                                                IconButton(
-                                                    onClick = {
-                                                        selectedImageUri = null
-                                                    },
-                                                    modifier = Modifier
-                                                        .size(24.dp)
-                                                        .background(
-                                                            color = MaterialTheme.colorScheme.surface.copy(
-                                                                alpha = 0.7f
-                                                            ),
-                                                            shape = CircleShape
+                                            Card(
+                                                modifier = Modifier
+                                                    .size(100.dp),
+                                                shape = RoundedCornerShape(8.dp),
+                                            ) {
+                                                Box {
+                                                    if (croppedBitmap != null) {
+                                                        Image(
+                                                            bitmap = croppedBitmap!!.asImageBitmap(),
+                                                            contentDescription = "Cropped Image",
+                                                            modifier = Modifier.fillMaxSize()
                                                         )
-                                                        .align(Alignment.TopEnd)
-                                                ) {
-                                                    Icon(
-                                                        Icons.Default.Clear,
-                                                        contentDescription = "remove image",
-                                                        modifier = Modifier.size(16.dp)
-                                                    )
+                                                    } else {
+                                                        selectedImageUri?.let { uri ->
+                                                            AsyncImage(
+                                                                model = ImageRequest.Builder(LocalContext.current)
+                                                                    .data(uri)
+                                                                    .crossfade(true)
+                                                                    .build(),
+                                                                contentDescription = "Selected Image",
+                                                                modifier = Modifier.fillMaxSize()
+                                                            )
+                                                        }
+                                                    }
+                                                    IconButton(
+                                                        onClick = {
+                                                            selectedImageUri = null
+                                                            croppedBitmap = null
+                                                            maskBitmap = null
+                                                            isInpaintMode = false
+                                                        },
+                                                        modifier = Modifier
+                                                            .size(24.dp)
+                                                            .background(
+                                                                color = MaterialTheme.colorScheme.surface.copy(
+                                                                    alpha = 0.7f
+                                                                ),
+                                                                shape = CircleShape
+                                                            )
+                                                            .align(Alignment.TopEnd)
+                                                    ) {
+                                                        Icon(
+                                                            Icons.Default.Clear,
+                                                            contentDescription = "Remove Image",
+                                                            modifier = Modifier.size(16.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
+
+                                            AnimatedVisibility(
+                                                visible = croppedBitmap != null && !isInpaintMode,
+                                                enter = fadeIn() + expandHorizontally(),
+                                                exit = fadeOut() + shrinkHorizontally()
+                                            ) {
+                                                Row {
+                                                    Spacer(modifier = Modifier.width(12.dp))
+                                                    FilledTonalIconButton(
+                                                        onClick = {
+                                                            if (croppedBitmap != null) {
+                                                                showInpaintScreen = true
+                                                            } else {
+                                                                Toast.makeText(context, "Please Crop First", Toast.LENGTH_SHORT).show()
+                                                            }
+                                                        },
+                                                        shape = CircleShape,
+                                                        modifier = Modifier.size(40.dp)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.Default.Brush,
+                                                            contentDescription = "Set Mask",
+                                                        )
+                                                    }
+                                                }
+                                            }
+
+                                            AnimatedVisibility(
+                                                visible = isInpaintMode && maskBitmap != null,
+                                                enter = fadeIn() + expandHorizontally(),
+                                                exit = fadeOut() + shrinkHorizontally()
+                                            ) {
+                                                Row {
+                                                    Spacer(modifier = Modifier.width(8.dp))
+                                                    Card(
+                                                        modifier = Modifier
+                                                            .size(100.dp),
+                                                        shape = RoundedCornerShape(8.dp),
+                                                    ) {
+                                                        Box {
+                                                            maskBitmap?.let { mb ->
+                                                                Image(
+                                                                    bitmap = mb.asImageBitmap(),
+                                                                    contentDescription = "Mask Image",
+                                                                    modifier = Modifier.fillMaxSize()
+                                                                )
+                                                            }
+                                                            IconButton(
+                                                                onClick = {
+                                                                    maskBitmap = null
+                                                                    isInpaintMode = false
+                                                                },
+                                                                modifier = Modifier
+                                                                    .size(24.dp)
+                                                                    .background(
+                                                                        color = MaterialTheme.colorScheme.surface.copy(
+                                                                            alpha = 0.7f
+                                                                        ),
+                                                                        shape = CircleShape
+                                                                    )
+                                                                    .align(Alignment.TopEnd)
+                                                            ) {
+                                                                Icon(
+                                                                    Icons.Default.Clear,
+                                                                    contentDescription = "Clear Mask",
+                                                                    modifier = Modifier.size(16.dp)
+                                                                )
+                                                            }
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }
@@ -1830,6 +1952,30 @@ fun ModelRunScreen(
                     }
                 }
             }
+        }
+        if (showCropScreen && imageUriForCrop != null) {
+            CropImageScreen(
+                imageUri = imageUriForCrop!!,
+                onCropComplete = { base64String, bitmap ->
+                    handleCropComplete(base64String, bitmap)
+                },
+                onCancel = {
+                    showCropScreen = false
+                    imageUriForCrop = null
+                    selectedImageUri = null
+                }
+            )
+        }
+        if (showInpaintScreen && croppedBitmap != null) {
+            InpaintScreen(
+                originalBitmap = croppedBitmap!!,
+                onInpaintComplete = { maskBase64, originalBitmap, maskBitmap ->
+                    handleInpaintComplete(maskBase64, originalBitmap, maskBitmap)
+                },
+                onCancel = {
+                    showInpaintScreen = false
+                }
+            )
         }
     }
     if (isPreviewMode && currentBitmap != null && !currentBitmap!!.isRecycled) {

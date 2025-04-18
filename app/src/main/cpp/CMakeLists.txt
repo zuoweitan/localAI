@@ -54,10 +54,10 @@ if(ANDROID)
         set(PLATFORM_NAME "windows")
         set(HOST_TAG "windows-x86_64")
     else()
-        set(PLATFORM_NAME "linux") 
+        set(PLATFORM_NAME "linux")
         set(HOST_TAG "linux-x86_64")
     endif()
-    
+
     set(OUTPUT_SUFFIX ${CMAKE_ANDROID_ARCH_ABI})
     set(PLATFORM_LIBS log android dl m c GLESv2 EGL)
     set(ANDROID_TOOLCHAIN_ROOT ${CMAKE_ANDROID_NDK}/toolchains/llvm/prebuilt/${HOST_TAG} CACHE PATH "Android NDK root path")
@@ -184,7 +184,9 @@ endif()
 
 # executable
 add_executable(${PROJECT_NAME} ${SOURCES})
-target_link_options(${PROJECT_NAME} PRIVATE "-Wl,-s")
+if(NOT QNN_DEBUG_ENABLE)
+    target_link_options(${PROJECT_NAME} PRIVATE "-Wl,-s")
+endif()
 target_include_directories(${PROJECT_NAME} PRIVATE ${PACKAGE_INCLUDES})
 
 set_target_properties(${PROJECT_NAME}

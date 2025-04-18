@@ -106,6 +106,22 @@ class BackgroundGenerationService : Service() {
         } else {
             null
         }
+        val mask = if (intent.getBooleanExtra("has_mask", false)) {
+            try {
+                val maskFile = File(applicationContext.filesDir, "mask.txt")
+                if (maskFile.exists()) {
+                    maskFile.readText()
+                } else {
+                    android.util.Log.w("GenerationService", "has_mask is true but mask.txt not found")
+                    null
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("GenerationService", "Failed to read mask data", e)
+                null
+            }
+        } else {
+            null
+        }
 
         android.util.Log.d("GenerationService", "params: steps=$steps, cfg=$cfg, seed=$seed")
 
@@ -117,7 +133,7 @@ class BackgroundGenerationService : Service() {
 
         serviceScope.launch {
             android.util.Log.d("GenerationService", "start generation")
-            runGeneration(prompt, negativePrompt, steps, cfg, seed, size, image, denoiseStrength)
+            runGeneration(prompt, negativePrompt, steps, cfg, seed, size, image, mask, denoiseStrength)
         }
 
         return START_NOT_STICKY
@@ -131,6 +147,7 @@ class BackgroundGenerationService : Service() {
         seed: Long?,
         size: Int,
         image: String?,
+        mask: String?,
         denoiseStrength: Float
     ) = withContext(Dispatchers.IO) {
         try {
@@ -146,6 +163,7 @@ class BackgroundGenerationService : Service() {
                 put("denoise_strength", denoiseStrength)
                 seed?.let { put("seed", it) }
                 image?.let { put("image", it) }
+                mask?.let { put("mask", it) }
             }
 
             val client = OkHttpClient.Builder()

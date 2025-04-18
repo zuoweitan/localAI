@@ -212,7 +212,7 @@ fun ModelListScreen(
 
                     Spacer(modifier = Modifier.height(32.dp))
                     Text(
-                        "Use img2img feature. Turn off if you don't need or encounter any problems.",
+                        stringResource(R.string.img2img_hint),
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
@@ -222,7 +222,7 @@ fun ModelListScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
-                            text = "Use img2img",
+                            text = "img2img",
                             style = MaterialTheme.typography.bodyMedium
                         )
                         val preferences = LocalContext.current.getSharedPreferences(

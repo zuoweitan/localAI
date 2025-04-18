@@ -365,6 +365,75 @@ void decode_image(const std::vector<uint8_t> &image_binary,
   }
 }
 
+void gaussianBlur(std::vector<uint8_t> &imageData, int width, int height, int radius)
+{
+  if (width <= 0 || height <= 0 || radius <= 0 || imageData.empty())
+  {
+    return;
+  }
+  int channels = imageData.size() / (width * height);
+  if (channels != 3 && channels != 4)
+  {
+    return;
+  }
+  int kernelSize = 2 * radius + 1;
+  std::vector<float> kernel(kernelSize);
+  float sigma = radius / 2.0f;
+  float sum = 0.0f;
+
+  for (int i = 0; i < kernelSize; ++i)
+  {
+    int x = i - radius;
+    kernel[i] = std::exp(-(x * x) / (2 * sigma * sigma));
+    sum += kernel[i];
+  }
+
+  for (int i = 0; i < kernelSize; ++i)
+  {
+    kernel[i] /= sum;
+  }
+
+  std::vector<uint8_t> tempBuffer(imageData.size());
+
+  for (int y = 0; y < height; ++y)
+  {
+    for (int x = 0; x < width; ++x)
+    {
+      for (int c = 0; c < channels; ++c)
+      {
+        float sum = 0.0f;
+
+        for (int kx = -radius; kx <= radius; ++kx)
+        {
+          int px = std::max(0, std::min(width - 1, x + kx));
+          sum += imageData[(y * width + px) * channels + c] * kernel[kx + radius];
+        }
+
+        tempBuffer[(y * width + x) * channels + c] = static_cast<uint8_t>(sum);
+      }
+    }
+  }
+
+  for (int y = 0; y < height; ++y)
+  {
+    for (int x = 0; x < width; ++x)
+    {
+      for (int c = 0; c < channels; ++c)
+      {
+        float sum = 0.0f;
+
+        for (int ky = -radius; ky <= radius; ++ky)
+        {
+          int py = std::max(0, std::min(height - 1, y + ky));
+          sum += tempBuffer[(py * width + x) * channels + c] * kernel[ky + radius];
+        }
+
+        imageData[(y * width + x) * channels + c] = static_cast<uint8_t>(sum);
+      }
+    }
+  }
+}
+
 inline void PrintEncodeResult(const std::vector<int> &ids)
 {
   std::cout << "tokens=[";

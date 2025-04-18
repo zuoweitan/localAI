@@ -53,6 +53,19 @@
     <string name="npu_models">NPU Models</string>
     <string name="no_cpu_models">暂无模型</string>
     <string name="no_npu_models">暂无模型</string>
+    <string name="img2img_hint">开启img2img功能，如果你不需要或遇到问题请关闭</string>
+
+    <!-- Crop Screen -->
+    <string name="crop_image">裁剪图像</string>
+    <string name="crop_hint">拖动调整裁剪区域</string>
+
+    <!-- Inpaint Screen -->
+    <string name="set_inpaint_area">设置重绘区域</string>
+    <string name="inpaint_hint">在图像上涂抹你想要重绘的区域</string>
+    <string name="brush_size">笔刷大小</string>
+    <string name="undo">撤销</string>
+    <string name="clear">清除</string>
+
 
     <!-- Run Screen -->
     <string name="prompt_settings">提示词设置</string>
@@ -72,6 +85,8 @@
     <string name="confirm_exit_hint">图片正在生成中，确定要退出吗？</string>
     <string name="reset">恢复默认参数</string>
     <string name="reset_hint">确定要将所有参数（包括提示词）恢复为默认值吗？此操作不可撤销。</string>
+    <string name="media_permission_hint">img2img功能需要媒体权限</string>
+    <string name="backend_failed">后端启动失败，您的设备可能不受支持</string>
 
     <!-- Parameter Settings -->
     <string name="generation_params">生成参数</string>
