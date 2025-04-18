@@ -450,7 +450,7 @@ fun ModelRunScreen(
         } else {
             Toast.makeText(
                 context,
-                "Media permission is needed for img2img generation",
+                context.getString(R.string.media_permission_hint),
                 Toast.LENGTH_SHORT
             ).show()
         }
@@ -464,7 +464,7 @@ fun ModelRunScreen(
         } else {
             Toast.makeText(
                 context,
-                "Media permission is needed for img2img generation",
+                context.getString(R.string.media_permission_hint),
                 Toast.LENGTH_SHORT
             ).show()
         }
@@ -786,7 +786,7 @@ fun ModelRunScreen(
             onUnhealthy = {
                 isBackendReady = false
                 isCheckingBackend = false
-                errorMessage = "Backend start failed. Maybe your device is not supported."
+                errorMessage = context.getString(R.string.backend_failed)
             }
         )
     }

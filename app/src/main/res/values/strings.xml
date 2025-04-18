@@ -53,6 +53,18 @@
     <string name="npu_models">NPU Models</string>
     <string name="no_cpu_models">No Models</string>
     <string name="no_npu_models">No Models</string>
+    <string name="img2img_hint">Use img2img feature. Turn off if you don\'t need or encounter any problems.</string>
+
+    <!-- Crop Screen -->
+    <string name="crop_image">Crop Image</string>
+    <string name="crop_hint">Drag to adjust the crop area</string>
+
+    <!-- Inpaint Screen -->
+    <string name="set_inpaint_area">Set Inpaint Area</string>
+    <string name="inpaint_hint">Paint over the areas you want to inpaint</string>
+    <string name="brush_size">Brush Size</string>
+    <string name="undo">Undo</string>
+    <string name="clear">Clear</string>
 
     <!-- Run Screen -->
     <string name="prompt_settings">Prompts</string>
@@ -72,6 +84,8 @@
     <string name="confirm_exit_hint">Generation in progress, Are you sure to Exit?</string>
     <string name="reset">Reset</string>
     <string name="reset_hint">Reset all parameters? This action cannot be undone. </string>
+    <string name="media_permission_hint">Media permission is needed for img2img generation</string>
+    <string name="backend_failed">Backend start failed. Maybe your device is not supported.</string>
 
     <!-- Parameter Settings -->
     <string name="generation_params">Generation Params</string>

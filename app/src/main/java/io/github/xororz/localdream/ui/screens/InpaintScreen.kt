@@ -39,12 +39,14 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.activity.compose.BackHandler
+import androidx.compose.ui.res.stringResource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.util.Base64
 import kotlin.math.max
+import io.github.xororz.localdream.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -220,7 +222,7 @@ fun InpaintScreen(
                 }
                 onInpaintComplete(base64String, originalBitmap, maskBitmap)
             } catch (e: Exception) {
-                errorMessage = "Processing mask failed: ${e.message}"
+                errorMessage = "Error: ${e.message}"
                 e.printStackTrace()
             } finally {
                 isLoading = false
@@ -253,7 +255,7 @@ fun InpaintScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Set Inpaint Area") },
+                title = { Text(stringResource(R.string.set_inpaint_area)) },
                 navigationIcon = {
                     IconButton(onClick = onCancel) {
                         Icon(
@@ -394,7 +396,7 @@ fun InpaintScreen(
                             .fillMaxWidth()
                     ) {
                         Text(
-                            "Paint over the areas you want to inpaint",
+                            stringResource(R.string.inpaint_hint),
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.padding(bottom = 12.dp)
                         )
@@ -406,7 +408,7 @@ fun InpaintScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                "Brush Size:",
+                                stringResource(R.string.brush_size),
                                 style = MaterialTheme.typography.labelLarge,
                                 modifier = Modifier.width(100.dp)
                             )
@@ -441,7 +443,7 @@ fun InpaintScreen(
                             ) {
                                 Icon(Icons.Default.Refresh, contentDescription = "Undo", modifier = Modifier.size(ButtonDefaults.IconSize))
                                 Spacer(modifier = Modifier.width(ButtonDefaults.IconSpacing))
-                                Text("Undo")
+                                Text(stringResource(R.string.undo))
                             }
 
                             Button(
@@ -451,7 +453,7 @@ fun InpaintScreen(
                             ) {
                                 Icon(Icons.Default.Clear, contentDescription = "Clear", modifier = Modifier.size(ButtonDefaults.IconSize))
                                 Spacer(modifier = Modifier.width(ButtonDefaults.IconSpacing))
-                                Text("Clear")
+                                Text(stringResource(R.string.clear))
                             }
                         }
                     }

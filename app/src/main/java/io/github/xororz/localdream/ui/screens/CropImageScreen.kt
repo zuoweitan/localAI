@@ -23,6 +23,8 @@ import android.graphics.Bitmap
 import androidx.activity.compose.BackHandler
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.res.stringResource
+import io.github.xororz.localdream.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -65,7 +67,7 @@ fun CropImageScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Crop Image") },
+                title = { Text(stringResource(R.string.crop_image)) },
                 navigationIcon = {
                     IconButton(onClick = onCancel) {
                         Icon(
@@ -112,7 +114,7 @@ fun CropImageScreen(
                     .align(Alignment.BottomCenter)
             ) {
                 Text(
-                    text = "Drag to adjust the crop area",
+                    text = stringResource(R.string.crop_hint),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                     modifier = Modifier.align(Alignment.Center)
