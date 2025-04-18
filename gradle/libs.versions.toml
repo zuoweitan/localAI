@@ -14,6 +14,7 @@ material-icons = "1.7.6"
 datastore = "1.0.0"
 material3-xml = "1.11.0"
 coil-compose = "2.4.0"
+cropify = "0.5.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -37,6 +38,7 @@ androidx-material-icons-extended = { group = "androidx.compose.material", name =
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
 material3-xml = { group = "com.google.android.material", name = "material", version.ref = "material3-xml" }
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil-compose" }
+cropify = { module = "com.github.MoyuruAizawa:cropify", version.ref = "cropify" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
