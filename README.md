@@ -2,7 +2,7 @@
 
 Android Stable Diffusion with Snapdragon NPU acceleration. Also supports CPU inference.
 
-![](./assets/demo.jpg)
+![](./assets/demo1.jpg)
 
 ## About this Repo
 
@@ -14,6 +14,14 @@ If you like it, please consider [sponsor](https://github.com/xororz/local-dream?
 
 - Download the APK from the [Releases](https://github.com/xororz/local-dream/releases) page or [Google Play](https://play.google.com/store/apps/details?id=io.github.xororz.localdream).
 - Open the app and download the model(s) you want to use
+
+## Features
+
+- txt2img
+- img2img
+- inpaint
+
+![](./assets/demo2.jpg)
 
 ## Build
 
