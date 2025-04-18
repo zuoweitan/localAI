@@ -45,6 +45,7 @@ bool use_mnn = false;
 bool use_safety_checker = false;
 bool use_mnn_clip = false;
 bool img2img = false;
+bool has_mask = false;
 float nsfw_threshold = 0.5f;
 namespace qnn
 {
@@ -556,6 +557,8 @@ GenerationResult generateImage(
     bool use_cfg,
     unsigned seed,
     std::vector<float> img_data,
+    std::vector<float> mask_data,
+    std::vector<float> mask_data_full,
     float denoise_strength,
     QnnModel *clipApp,
     QnnModel *unetApp,
@@ -636,10 +639,15 @@ GenerationResult generateImage(
 
     xt::random::seed(seed);
     xt::xarray<float> latents = xt::random::randn<float>(shape);
+    xt::xarray<float> original_latents;
+    xt::xarray<float> original_image;
+    xt::xarray<float> mask;
+    xt::xarray<float> mask_full;
 
     int start_step = 0;
     if (img2img && img_data.size() == 3 * output_size * output_size)
     {
+      original_image = xt::adapt(img_data, {1, 3, output_size, output_size});
       Picture vae_encoder_input;
       vae_encoder_input.pixel_values.resize(1 * 3 * output_size * output_size);
       memcpy(vae_encoder_input.pixel_values.data(), img_data.data(), 3 * output_size * output_size * sizeof(float));
@@ -668,6 +676,13 @@ GenerationResult generateImage(
       xt::xarray<int> x_xt = xt::adapt(t, {1});
       latents = xt::random::randn<float>(shape);
       latents = scheduler.add_noise(img_latent_scaled, latents, x_xt);
+      if (has_mask)
+      {
+        original_latents = img_latent_scaled;
+        mask = xt::adapt(mask_data, {1, 4, sample_size, sample_size});
+        mask_full = xt::adapt(mask_data_full, {1, 3, output_size, output_size});
+        latents = xt::eval(latents * mask + original_latents * (1 - mask));
+      }
     }
 
     for (int i = start_step; i < timesteps.size(); i++)
@@ -714,6 +729,10 @@ GenerationResult generateImage(
       }
 
       latents = scheduler.step(noise_pred, timesteps[i], latents).prev_sample;
+      if (has_mask)
+      {
+        latents = xt::eval(latents * mask + original_latents * (1 - mask));
+      }
       auto end2 = std::chrono::high_resolution_clock::now();
       auto duration2 = std::chrono::duration_cast<std::chrono::milliseconds>(end2 - end).count();
       std::cout << "Scheduler step duration: " << duration2 << "ms" << std::endl;
@@ -736,7 +755,11 @@ GenerationResult generateImage(
       throw std::runtime_error("VAE decoder execution failed");
     }
 
-    auto pixel_values = xt::adapt(vae_decoder_output.pixel_values, {1, 3, output_size, output_size});
+    xt::xarray<float> pixel_values = xt::adapt(vae_decoder_output.pixel_values, {1, 3, output_size, output_size});
+    if (has_mask)
+    {
+      pixel_values = pixel_values * mask_full + original_image * (1 - mask_full);
+    }
     auto image = xt::view(pixel_values, 0);
     auto transposed = xt::transpose(image, {1, 2, 0});
     auto normalized = xt::clip(((transposed + 1.0) / 2.0) * 255.0, 0.0, 255.0);
@@ -790,6 +813,8 @@ GenerationResult generateImageClipCPU(
     bool use_cfg,
     unsigned seed,
     std::vector<float> img_data,
+    std::vector<float> mask_data,
+    std::vector<float> mask_data_full,
     float denoise_strength,
     MNN::Interpreter *clipInterpreter,
     QnnModel *unetApp,
@@ -888,10 +913,15 @@ GenerationResult generateImageClipCPU(
 
     xt::random::seed(seed);
     xt::xarray<float> latents = xt::random::randn<float>(shape);
+    xt::xarray<float> original_latents;
+    xt::xarray<float> original_image;
+    xt::xarray<float> mask;
+    xt::xarray<float> mask_full;
 
     int start_step = 0;
     if (img2img && img_data.size() == 3 * output_size * output_size)
     {
+      original_image = xt::adapt(img_data, {1, 3, output_size, output_size});
       Picture vae_encoder_input;
       vae_encoder_input.pixel_values.resize(1 * 3 * output_size * output_size);
       memcpy(vae_encoder_input.pixel_values.data(), img_data.data(), 3 * output_size * output_size * sizeof(float));
@@ -920,6 +950,13 @@ GenerationResult generateImageClipCPU(
       xt::xarray<int> x_xt = xt::adapt(t, {1});
       latents = xt::random::randn<float>(shape);
       latents = scheduler.add_noise(img_latent_scaled, latents, x_xt);
+      if (has_mask)
+      {
+        original_latents = img_latent_scaled;
+        mask = xt::adapt(mask_data, {1, 4, sample_size, sample_size});
+        mask_full = xt::adapt(mask_data_full, {1, 3, output_size, output_size});
+        latents = xt::eval(latents * mask + original_latents * (1 - mask));
+      }
     }
 
     for (int i = start_step; i < timesteps.size(); i++)
@@ -966,6 +1003,10 @@ GenerationResult generateImageClipCPU(
       }
 
       latents = scheduler.step(noise_pred, timesteps[i], latents).prev_sample;
+      if (has_mask)
+      {
+        latents = xt::eval(latents * mask + original_latents * (1 - mask));
+      }
       auto end2 = std::chrono::high_resolution_clock::now();
       auto duration2 = std::chrono::duration_cast<std::chrono::milliseconds>(end2 - end).count();
       std::cout << "Scheduler step duration: " << duration2 << "ms" << std::endl;
@@ -988,7 +1029,11 @@ GenerationResult generateImageClipCPU(
       throw std::runtime_error("VAE decoder execution failed");
     }
 
-    auto pixel_values = xt::adapt(vae_decoder_output.pixel_values, {1, 3, output_size, output_size});
+    xt::xarray<float> pixel_values = xt::adapt(vae_decoder_output.pixel_values, {1, 3, output_size, output_size});
+    if (has_mask)
+    {
+      pixel_values = pixel_values * mask_full + original_image * (1 - mask_full);
+    }
     auto image = xt::view(pixel_values, 0);
     auto transposed = xt::transpose(image, {1, 2, 0});
     auto normalized = xt::clip(((transposed + 1.0) / 2.0) * 255.0, 0.0, 255.0);
@@ -1041,6 +1086,8 @@ GenerationResult generateImageMNN(
     bool use_cfg,
     unsigned seed,
     std::vector<float> img_data,
+    std::vector<float> mask_data,
+    std::vector<float> mask_data_full,
     float denoise_strength,
     MNN::Interpreter *clipInterpreter,
     MNN::Interpreter *unetInterpreter,
@@ -1131,10 +1178,15 @@ GenerationResult generateImageMNN(
 
     xt::random::seed(seed);
     xt::xarray<float> latents = xt::random::randn<float>(shape);
+    xt::xarray<float> original_latents;
+    xt::xarray<float> original_image;
+    xt::xarray<float> mask;
+    xt::xarray<float> mask_full;
 
     std::vector<int> current_timestep = {0};
     if (img2img && img_data.size() == 3 * output_size * output_size)
     {
+      original_image = xt::adapt(img_data, {1, 3, output_size, output_size});
       Picture vae_encoder_input;
       vae_encoder_input.pixel_values.resize(1 * 3 * output_size * output_size);
       memcpy(vae_encoder_input.pixel_values.data(), img_data.data(), 3 * output_size * output_size * sizeof(float));
@@ -1170,6 +1222,13 @@ GenerationResult generateImageMNN(
       xt::xarray<int> x_xt = xt::adapt(t, {1});
       latents = xt::random::randn<float>(shape);
       latents = scheduler.add_noise(img_latent_scaled, latents, x_xt);
+      if (has_mask)
+      {
+        original_latents = img_latent_scaled;
+        mask = xt::adapt(mask_data, {1, 4, sample_size, sample_size});
+        mask_full = xt::adapt(mask_data_full, {1, 3, output_size, output_size});
+        latents = xt::eval(latents * mask + original_latents * (1 - mask));
+      }
     }
 
     for (int i = current_timestep[0]; i < timesteps.size(); i++)
@@ -1224,6 +1283,10 @@ GenerationResult generateImageMNN(
       }
 
       latents = scheduler.step(noise_pred, timesteps[i], latents).prev_sample;
+      if (has_mask)
+      {
+        latents = xt::eval(latents * mask + original_latents * (1 - mask));
+      }
 
       current_step++;
       if (progress_callback)
@@ -1249,7 +1312,11 @@ GenerationResult generateImageMNN(
     vae_decoder_output.resize(3 * output_size * output_size);
     memcpy(vae_decoder_output.data(), vae_output_tensor->host<float>(), 3 * output_size * output_size * sizeof(float));
 
-    auto pixel_values = xt::adapt(vae_decoder_output, {1, 3, output_size, output_size});
+    xt::xarray<float> pixel_values = xt::adapt(vae_decoder_output, {1, 3, output_size, output_size});
+    if (has_mask)
+    {
+      pixel_values = pixel_values * mask_full + original_image * (1 - mask_full);
+    }
     auto image = xt::view(pixel_values, 0);
     auto transposed = xt::transpose(image, {1, 2, 0});
     auto normalized = xt::clip(((transposed + 1.0) / 2.0) * 255.0, 0.0, 255.0);
@@ -1409,7 +1476,10 @@ int main(int argc, char **argv)
     }
 
     img2img = false;
+    has_mask = false;
     std::vector<float> img_float_data;
+    std::vector<float> mask_float_data;
+    std::vector<float> mask_float_data_full;
     if (json.contains("image")) {
       img2img = true;
       auto image = json["image"].get<std::string>();
@@ -1427,6 +1497,47 @@ int main(int argc, char **argv)
         img_data = xt::transpose(img_data, {0, 3, 1, 2});
         img_data = xt::eval(img_data * 2.0 - 1.0);
         img_float_data = std::vector<float>(img_data.begin(), img_data.end());
+      }
+      if(json.contains("mask"))
+      {
+        has_mask = true;
+        auto mask = json["mask"].get<std::string>();
+        auto decoded = base64_decode(mask);
+        auto decoded_buffer = std::vector<uint8_t>(decoded.begin(), decoded.end());
+        std::vector<uint8_t> decoded_image;
+        std::vector<uint8_t> decoded_image_full;
+        decode_image(decoded_buffer, decoded_image, sample_size);
+        decode_image(decoded_buffer, decoded_image_full, output_size);
+        if(decoded_image.size() != 3 * sample_size * sample_size)
+        {
+          has_mask = false;
+          mask_float_data.clear();
+        } else {
+          // gaussianBlur(decoded_image, sample_size, sample_size, sample_size / 8);
+          xt::xarray<uint8_t> img_xt = xt::adapt(decoded_image, {1, sample_size, sample_size, 3});
+          xt::xarray<float> img_data = xt::cast<float>(img_xt);
+          xt::xarray<float> mean_channel = xt::mean(img_data, {3});
+          mean_channel = xt::reshape_view(mean_channel, {1, sample_size, sample_size, 1});
+          img_data = xt::concatenate(
+              xt::xtuple(mean_channel, mean_channel, mean_channel, mean_channel),
+              3
+          );
+          img_data = xt::eval(img_data / 255.0);
+          img_data = xt::transpose(img_data, {0, 3, 1, 2});
+          mask_float_data.insert(mask_float_data.end(), img_data.begin(), img_data.end());
+        }
+        if(decoded_image_full.size() != 3 * output_size * output_size)
+        {
+          has_mask = false;
+          mask_float_data_full.clear();
+        } else {
+          gaussianBlur(decoded_image_full, output_size, output_size, sample_size / 8);
+          xt::xarray<uint8_t> img_xt = xt::adapt(decoded_image_full, {1, output_size, output_size, 3});
+          xt::xarray<float> img_data = xt::cast<float>(img_xt);
+          img_data = xt::eval(img_data / 255.0);
+          img_data = xt::transpose(img_data, {0, 3, 1, 2});
+          mask_float_data_full = std::vector<float>(img_data.begin(), img_data.end());
+        }
       }
     }
     float denoise_strength = 0.6;
@@ -1450,7 +1561,7 @@ int main(int argc, char **argv)
     
     res.set_chunked_content_provider(
       "text/event-stream",
-      [prompt, negative_prompt, steps, cfg, use_cfg, seed, img_float_data, denoise_strength, &clipApp, &unetApp, &vaeDecoderApp, &vaeEncoderApp, &safetyCheckerApp]
+      [prompt, negative_prompt, steps, cfg, use_cfg, seed, img_float_data, mask_float_data, mask_float_data_full, denoise_strength, &clipApp, &unetApp, &vaeDecoderApp, &vaeEncoderApp, &safetyCheckerApp]
       (size_t, httplib::DataSink& sink) -> bool {
         try {
           auto result = generateImageMNN(
@@ -1461,6 +1572,8 @@ int main(int argc, char **argv)
             use_cfg,
             seed,
             img_float_data,
+            mask_float_data,
+            mask_float_data_full,
             denoise_strength,
             clipApp, 
             unetApp, 
@@ -1617,7 +1730,10 @@ int main(int argc, char **argv)
       sample_size = size / 8;
     }
     img2img = false;
+    has_mask = false;
     std::vector<float> img_float_data;
+    std::vector<float> mask_float_data;
+    std::vector<float> mask_float_data_full;
     if (json.contains("image")) {
       img2img = true;
       auto image = json["image"].get<std::string>();
@@ -1625,18 +1741,57 @@ int main(int argc, char **argv)
       auto decoded_buffer = std::vector<uint8_t>(decoded.begin(), decoded.end());
       std::vector<uint8_t> decoded_image;
       decode_image(decoded_buffer, decoded_image, output_size);
-      if (decoded_image.size() != 3 * output_size * output_size)
+      if(decoded_image.size() != 3 * output_size * output_size)
       {
         img_float_data.clear();
-      }
-      else
-      {
+      } else {
         xt::xarray<uint8_t> img_xt = xt::adapt(decoded_image, {1, output_size, output_size, 3});
         xt::xarray<float> img_data = xt::cast<float>(img_xt);
         img_data = xt::eval(img_data / 255.0);
         img_data = xt::transpose(img_data, {0, 3, 1, 2});
         img_data = xt::eval(img_data * 2.0 - 1.0);
         img_float_data = std::vector<float>(img_data.begin(), img_data.end());
+      }
+      if(json.contains("mask"))
+      {
+        has_mask = true;
+        auto mask = json["mask"].get<std::string>();
+        auto decoded = base64_decode(mask);
+        auto decoded_buffer = std::vector<uint8_t>(decoded.begin(), decoded.end());
+        std::vector<uint8_t> decoded_image;
+        std::vector<uint8_t> decoded_image_full;
+        decode_image(decoded_buffer, decoded_image, sample_size);
+        decode_image(decoded_buffer, decoded_image_full, output_size);
+        if(decoded_image.size() != 3 * sample_size * sample_size)
+        {
+          has_mask = false;
+          mask_float_data.clear();
+        } else {
+          // gaussianBlur(decoded_image, sample_size, sample_size, sample_size / 8);
+          xt::xarray<uint8_t> img_xt = xt::adapt(decoded_image, {1, sample_size, sample_size, 3});
+          xt::xarray<float> img_data = xt::cast<float>(img_xt);
+          xt::xarray<float> mean_channel = xt::mean(img_data, {3});
+          mean_channel = xt::reshape_view(mean_channel, {1, sample_size, sample_size, 1});
+          img_data = xt::concatenate(
+              xt::xtuple(mean_channel, mean_channel, mean_channel, mean_channel),
+              3
+          );
+          img_data = xt::eval(img_data / 255.0);
+          img_data = xt::transpose(img_data, {0, 3, 1, 2});
+          mask_float_data.insert(mask_float_data.end(), img_data.begin(), img_data.end());
+        }
+        if(decoded_image_full.size() != 3 * output_size * output_size)
+        {
+          has_mask = false;
+          mask_float_data_full.clear();
+        } else {
+          gaussianBlur(decoded_image_full, output_size, output_size, sample_size / 8);
+          xt::xarray<uint8_t> img_xt = xt::adapt(decoded_image_full, {1, output_size, output_size, 3});
+          xt::xarray<float> img_data = xt::cast<float>(img_xt);
+          img_data = xt::eval(img_data / 255.0);
+          img_data = xt::transpose(img_data, {0, 3, 1, 2});
+          mask_float_data_full = std::vector<float>(img_data.begin(), img_data.end());
+        }
       }
     }
     float denoise_strength = 0.6;
@@ -1664,7 +1819,7 @@ int main(int argc, char **argv)
     
     res.set_chunked_content_provider(
       "text/event-stream",
-      [prompt, negative_prompt, steps, cfg, use_cfg, seed, img_float_data, denoise_strength, &clipApp, &clipAppMNN, &unetApp, &vaeDecoderApp, &vaeEncoderApp, &safetyCheckerApp]
+      [prompt, negative_prompt, steps, cfg, use_cfg, seed, img_float_data, mask_float_data, mask_float_data_full, denoise_strength, &clipApp, &clipAppMNN, &unetApp, &vaeDecoderApp, &vaeEncoderApp, &safetyCheckerApp]
       (size_t, httplib::DataSink& sink) -> bool {
         try {
           GenerationResult result;
@@ -1677,6 +1832,8 @@ int main(int argc, char **argv)
             use_cfg,
             seed,
             img_float_data,
+            mask_float_data,
+            mask_float_data_full,
             denoise_strength,
             clipAppMNN, 
             unetApp.get(), 
@@ -1701,6 +1858,8 @@ int main(int argc, char **argv)
             use_cfg,
             seed,
             img_float_data,
+            mask_float_data,
+            mask_float_data_full,
             denoise_strength,
             clipApp.get(), 
             unetApp.get(), 
