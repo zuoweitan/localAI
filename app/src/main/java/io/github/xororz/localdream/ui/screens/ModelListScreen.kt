@@ -222,7 +222,7 @@ fun ModelListScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
-                            text = "Use img2img",
+                            text = "img2img",
                             style = MaterialTheme.typography.bodyMedium
                         )
                         val preferences = LocalContext.current.getSharedPreferences(
