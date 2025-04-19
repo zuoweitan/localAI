@@ -639,6 +639,7 @@ GenerationResult generateImage(
 
     xt::random::seed(seed);
     xt::xarray<float> latents = xt::random::randn<float>(shape);
+    xt::xarray<float> g_latents = xt::random::randn<float>(shape);
     xt::xarray<float> original_latents;
     xt::xarray<float> original_image;
     xt::xarray<float> mask;
@@ -674,14 +675,13 @@ GenerationResult generateImage(
       scheduler.set_begin_index(start_step);
       std::vector<int> t = {(int)(timesteps[start_step])};
       xt::xarray<int> x_xt = xt::adapt(t, {1});
-      latents = xt::random::randn<float>(shape);
-      latents = scheduler.add_noise(img_latent_scaled, latents, x_xt);
+      latents = scheduler.add_noise(img_latent_scaled, g_latents, x_xt);
       if (has_mask)
       {
         original_latents = img_latent_scaled;
         mask = xt::adapt(mask_data, {1, 4, sample_size, sample_size});
         mask_full = xt::adapt(mask_data_full, {1, 3, output_size, output_size});
-        latents = xt::eval(latents * mask + original_latents * (1 - mask));
+        // latents = xt::eval(latents * mask + original_latents * (1 - mask));
       }
     }
 
@@ -731,7 +731,10 @@ GenerationResult generateImage(
       latents = scheduler.step(noise_pred, timesteps[i], latents).prev_sample;
       if (has_mask)
       {
-        latents = xt::eval(latents * mask + original_latents * (1 - mask));
+        std::vector<int> current_t = {(int)(timesteps[i])};
+        xt::xarray<float> original_latents_noised = scheduler.add_noise(original_latents, g_latents, xt::adapt(current_t, {1}));
+        latents = xt::eval(latents * mask + original_latents_noised * (1 - mask));
+        // latents = xt::eval(latents * mask + original_latents * (1 - mask));
       }
       auto end2 = std::chrono::high_resolution_clock::now();
       auto duration2 = std::chrono::duration_cast<std::chrono::milliseconds>(end2 - end).count();
@@ -913,6 +916,7 @@ GenerationResult generateImageClipCPU(
 
     xt::random::seed(seed);
     xt::xarray<float> latents = xt::random::randn<float>(shape);
+    xt::xarray<float> g_latents = xt::random::randn<float>(shape);
     xt::xarray<float> original_latents;
     xt::xarray<float> original_image;
     xt::xarray<float> mask;
@@ -948,14 +952,13 @@ GenerationResult generateImageClipCPU(
       scheduler.set_begin_index(start_step);
       std::vector<int> t = {(int)(timesteps[start_step])};
       xt::xarray<int> x_xt = xt::adapt(t, {1});
-      latents = xt::random::randn<float>(shape);
-      latents = scheduler.add_noise(img_latent_scaled, latents, x_xt);
+      latents = scheduler.add_noise(img_latent_scaled, g_latents, x_xt);
       if (has_mask)
       {
         original_latents = img_latent_scaled;
         mask = xt::adapt(mask_data, {1, 4, sample_size, sample_size});
         mask_full = xt::adapt(mask_data_full, {1, 3, output_size, output_size});
-        latents = xt::eval(latents * mask + original_latents * (1 - mask));
+        // latents = xt::eval(latents * mask + original_latents * (1 - mask));
       }
     }
 
@@ -1005,7 +1008,10 @@ GenerationResult generateImageClipCPU(
       latents = scheduler.step(noise_pred, timesteps[i], latents).prev_sample;
       if (has_mask)
       {
-        latents = xt::eval(latents * mask + original_latents * (1 - mask));
+        std::vector<int> current_t = {(int)(timesteps[i])};
+        xt::xarray<float> original_latents_noised = scheduler.add_noise(original_latents, g_latents, xt::adapt(current_t, {1}));
+        latents = xt::eval(latents * mask + original_latents_noised * (1 - mask));
+        // latents = xt::eval(latents * mask + original_latents * (1 - mask));
       }
       auto end2 = std::chrono::high_resolution_clock::now();
       auto duration2 = std::chrono::duration_cast<std::chrono::milliseconds>(end2 - end).count();
@@ -1178,6 +1184,7 @@ GenerationResult generateImageMNN(
 
     xt::random::seed(seed);
     xt::xarray<float> latents = xt::random::randn<float>(shape);
+    xt::xarray<float> g_latents = xt::random::randn<float>(shape);
     xt::xarray<float> original_latents;
     xt::xarray<float> original_image;
     xt::xarray<float> mask;
@@ -1220,14 +1227,13 @@ GenerationResult generateImageMNN(
       scheduler.set_begin_index(start_step);
       std::vector<int> t = {(int)(timesteps[start_step])};
       xt::xarray<int> x_xt = xt::adapt(t, {1});
-      latents = xt::random::randn<float>(shape);
-      latents = scheduler.add_noise(img_latent_scaled, latents, x_xt);
+      latents = scheduler.add_noise(img_latent_scaled, g_latents, x_xt);
       if (has_mask)
       {
         original_latents = img_latent_scaled;
         mask = xt::adapt(mask_data, {1, 4, sample_size, sample_size});
         mask_full = xt::adapt(mask_data_full, {1, 3, output_size, output_size});
-        latents = xt::eval(latents * mask + original_latents * (1 - mask));
+        // latents = xt::eval(latents * mask + original_latents * (1 - mask));
       }
     }
 
@@ -1285,7 +1291,10 @@ GenerationResult generateImageMNN(
       latents = scheduler.step(noise_pred, timesteps[i], latents).prev_sample;
       if (has_mask)
       {
-        latents = xt::eval(latents * mask + original_latents * (1 - mask));
+        std::vector<int> current_t = {(int)(timesteps[i])};
+        xt::xarray<float> original_latents_noised = scheduler.add_noise(original_latents, g_latents, xt::adapt(current_t, {1}));
+        latents = xt::eval(latents * mask + original_latents_noised * (1 - mask));
+        // latents = xt::eval(latents * mask + original_latents * (1 - mask));
       }
 
       current_step++;
