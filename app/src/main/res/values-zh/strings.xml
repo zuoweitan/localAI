@@ -33,6 +33,7 @@
     <string name="available_models">可用模型</string>
     <string name="selected_items">已选择 %d 项</string>
     <string name="download_settings">下载设置</string>
+    <string name="download">点击下载</string>
     <string name="download_from">下载地址</string>
     <string name="download_settings_hint">设置模型下载地址\n默认为https://huggingface.co/\n国内用户可使用镜像https://hf-mirror.com/</string>
     <string name="model_size">总大小：约%s</string>

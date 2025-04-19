@@ -40,6 +40,7 @@ import androidx.compose.material.icons.automirrored.filled.Help
 import androidx.compose.material3.TabRowDefaults.SecondaryIndicator
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
+import androidx.compose.ui.draw.clip
 import androidx.core.content.edit
 
 @Composable
@@ -608,7 +609,8 @@ fun ModelCard(
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
             stiffness = Spring.StiffnessLow
-        )
+        ),
+        label = "CardElevationAnimation"
     )
 
     val containerColor = when {
@@ -620,9 +622,18 @@ fun ModelCard(
 
     val contentColor = when {
         isSelected -> MaterialTheme.colorScheme.onSecondaryContainer
-        !model.isDownloaded && !model.isPartiallyDownloaded && isSelectionMode -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+        !model.isDownloaded && !model.isPartiallyDownloaded && isSelectionMode -> MaterialTheme.colorScheme.onSurface.copy(
+            alpha = 0.5f
+        )
+
         else -> MaterialTheme.colorScheme.onSurface
     }
+
+    val backgroundColor by animateColorAsState(
+        targetValue = containerColor,
+        animationSpec = tween(durationMillis = 300),
+        label = "CardBackgroundColorAnimation"
+    )
 
     ElevatedCard(
         modifier = modifier
@@ -640,32 +651,37 @@ fun ModelCard(
                 )
             },
         colors = CardDefaults.elevatedCardColors(
-            containerColor = containerColor,
+            containerColor = backgroundColor,
             contentColor = contentColor
         ),
         elevation = CardDefaults.elevatedCardElevation(
             defaultElevation = elevation.dp
-        )
+        ),
+        shape = RoundedCornerShape(16.dp)
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
-            // CPU/NPU Badge
             Surface(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(8.dp),
                 shape = RoundedCornerShape(4.dp),
-                color = MaterialTheme.colorScheme.tertiaryContainer
+                color = if (model.runOnCpu)
+                    MaterialTheme.colorScheme.tertiaryContainer
+                else
+                    MaterialTheme.colorScheme.primaryContainer
             ) {
                 Text(
                     text = if (model.runOnCpu) "CPU" else "NPU",
                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    color = if (model.runOnCpu)
+                        MaterialTheme.colorScheme.onTertiaryContainer
+                    else
+                        MaterialTheme.colorScheme.onPrimaryContainer,
                     fontWeight = FontWeight.Medium
                 )
             }
 
-            // Main content
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -691,27 +707,104 @@ fun ModelCard(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = stringResource(R.string.model_size, model.approximateSize),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = contentColor.copy(alpha = 0.7f)
-                    )
-                    when {
-                        model.isDownloaded -> {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.SdStorage,
+                                contentDescription = "model size",
+                                tint = contentColor.copy(alpha = 0.6f),
+                                modifier = Modifier.size(16.dp)
+                            )
                             Text(
-                                text = stringResource(R.string.downloaded),
+                                text = model.approximateSize,
                                 style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Medium
+                                color = contentColor.copy(alpha = 0.7f)
                             )
                         }
-                        model.isPartiallyDownloaded -> {
-                            Text(
-                                text = stringResource(R.string.partially_downloaded),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.tertiary,
-                                fontWeight = FontWeight.Medium
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AspectRatio,
+                                contentDescription = "image size",
+                                tint = contentColor.copy(alpha = 0.6f),
+                                modifier = Modifier.size(16.dp)
                             )
+                            Text(
+                                text = if (model.runOnCpu) "128~512" else "${model.generationSize}×${model.generationSize}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = contentColor.copy(alpha = 0.7f)
+                            )
+                        }
+                    }
+
+                    when {
+                        model.isDownloaded -> {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = "downloaded",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = stringResource(R.string.downloaded),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+
+                        model.isPartiallyDownloaded -> {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Sync,
+                                    contentDescription = "partially downloaded",
+                                    tint = MaterialTheme.colorScheme.tertiary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = stringResource(R.string.partially_downloaded),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.tertiary,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+
+                        else -> {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.CloudDownload,
+                                    contentDescription = "download",
+                                    tint = contentColor.copy(alpha = 0.6f),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = stringResource(R.string.download),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = contentColor.copy(alpha = 0.6f)
+                                )
+                            }
                         }
                     }
                 }
@@ -731,12 +824,25 @@ fun ModelCard(
                         )
                         Spacer(modifier = Modifier.height(4.dp))
 
-                        LinearProgressIndicator(
-                            progress = { downloadProgress.progress },
-                            modifier = Modifier.fillMaxWidth(),
-                            color = MaterialTheme.colorScheme.primary,
-                            trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(4.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(downloadProgress.progress)
+                                    .fillMaxHeight()
+                                    .background(
+                                        if (model.runOnCpu)
+                                            MaterialTheme.colorScheme.tertiary
+                                        else
+                                            MaterialTheme.colorScheme.primary
+                                    )
+                            )
+                        }
 
                         if (downloadProgress.totalBytes > 0) {
                             Spacer(modifier = Modifier.height(2.dp))
