@@ -378,6 +378,7 @@ fun ModelRunScreen(
     var showInpaintScreen by remember { mutableStateOf(false) }
     var maskBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var isInpaintMode by remember { mutableStateOf(false) }
+    var savedPathHistory by remember { mutableStateOf<List<PathData>?>(null) }
 
     fun processSelectedImage(uri: Uri) {
         imageUriForCrop = uri
@@ -404,10 +405,11 @@ fun ModelRunScreen(
             }
         }
     }
-    fun handleInpaintComplete(maskBase64: String, originalBitmap: Bitmap, maskBmp: Bitmap) {
+    fun handleInpaintComplete(maskBase64: String, originalBitmap: Bitmap, maskBmp: Bitmap, pathHistory: List<PathData>) {
         showInpaintScreen = false
         isInpaintMode = true
         maskBitmap = maskBmp
+        savedPathHistory = pathHistory
 
         scope.launch(Dispatchers.IO) {
             try {
@@ -425,6 +427,7 @@ fun ModelRunScreen(
                     Toast.makeText(context, "Save failed: ${e.message}", Toast.LENGTH_SHORT).show()
                     isInpaintMode = false
                     maskBitmap = null
+                    savedPathHistory = null
                 }
             }
         }
@@ -1542,7 +1545,12 @@ fun ModelRunScreen(
                                                     Spacer(modifier = Modifier.width(8.dp))
                                                     Card(
                                                         modifier = Modifier
-                                                            .size(100.dp),
+                                                            .size(100.dp)
+                                                            .clickable {
+                                                                if (croppedBitmap != null && maskBitmap != null) {
+                                                                    showInpaintScreen = true
+                                                                }
+                                                            },
                                                         shape = RoundedCornerShape(8.dp),
                                                     ) {
                                                         Box {
@@ -1557,6 +1565,7 @@ fun ModelRunScreen(
                                                                 onClick = {
                                                                     maskBitmap = null
                                                                     isInpaintMode = false
+                                                                    savedPathHistory = null
                                                                 },
                                                                 modifier = Modifier
                                                                     .size(24.dp)
@@ -1969,8 +1978,10 @@ fun ModelRunScreen(
         if (showInpaintScreen && croppedBitmap != null) {
             InpaintScreen(
                 originalBitmap = croppedBitmap!!,
-                onInpaintComplete = { maskBase64, originalBitmap, maskBitmap ->
-                    handleInpaintComplete(maskBase64, originalBitmap, maskBitmap)
+                existingMaskBitmap = if (isInpaintMode) maskBitmap else null,
+                existingPathHistory = savedPathHistory,
+                onInpaintComplete = { maskBase64, originalBitmap, maskBitmap, pathHistory ->
+                    handleInpaintComplete(maskBase64, originalBitmap, maskBitmap, pathHistory)
                 },
                 onCancel = {
                     showInpaintScreen = false

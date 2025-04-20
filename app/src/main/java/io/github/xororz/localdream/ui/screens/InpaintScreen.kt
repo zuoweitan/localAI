@@ -10,14 +10,17 @@ import android.graphics.PorterDuffXfermode
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,6 +31,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -46,27 +50,73 @@ import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.util.Base64
 import kotlin.math.max
+import android.content.Context
+import androidx.compose.ui.graphics.Color as ComposeColor
 import io.github.xororz.localdream.R
+
+enum class ToolMode {
+    BRUSH,
+    ERASER
+}
+
+data class PathData(
+    val points: List<Offset>,
+    val size: Float,
+    val mode: ToolMode,
+    val color: Int = Color.WHITE
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun InpaintScreen(
     originalBitmap: Bitmap,
-    onInpaintComplete: (String, Bitmap, Bitmap) -> Unit,
+    existingMaskBitmap: Bitmap? = null,
+    existingPathHistory: List<PathData>? = null,
+    onInpaintComplete: (String, Bitmap, Bitmap, List<PathData>) -> Unit,
     onCancel: () -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
     val density = LocalDensity.current
 
+    val sharedPrefs = remember { context.getSharedPreferences("inpaint_prefs", Context.MODE_PRIVATE) }
+    val defaultColor = android.graphics.Color.WHITE
+    val savedColor = remember { sharedPrefs.getInt("brush_color", defaultColor) }
+    val savedToolMode = remember { sharedPrefs.getString("tool_mode", ToolMode.BRUSH.name) ?: ToolMode.BRUSH.name }
+
+    var brushColor by remember { mutableStateOf(savedColor) }
+    var showColorPicker by remember { mutableStateOf(false) }
+    var currentToolMode by remember { mutableStateOf(ToolMode.valueOf(savedToolMode)) }
+
+    LaunchedEffect(currentToolMode) {
+        sharedPrefs.edit().putString("tool_mode", currentToolMode.name).apply()
+    }
+
+    val colorOptions = remember {
+        arrayOf(
+            android.graphics.Color.WHITE,
+            android.graphics.Color.RED,
+            android.graphics.Color.GREEN,
+            android.graphics.Color.BLUE,
+            android.graphics.Color.YELLOW,
+            android.graphics.Color.CYAN,
+            android.graphics.Color.MAGENTA,
+            android.graphics.Color.BLACK
+        )
+    }
+
     val maskBitmap = remember {
-        Bitmap.createBitmap(
-            originalBitmap.width,
-            originalBitmap.height,
-            Bitmap.Config.ARGB_8888
-        ).apply {
-            val canvas = Canvas(this)
-            canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
+        if (existingMaskBitmap != null) {
+            existingMaskBitmap.copy(existingMaskBitmap.config ?: Bitmap.Config.ARGB_8888, true)
+        } else {
+            Bitmap.createBitmap(
+                originalBitmap.width,
+                originalBitmap.height,
+                Bitmap.Config.ARGB_8888
+            ).apply {
+                val canvas = Canvas(this)
+                canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
+            }
         }
     }
 
@@ -86,9 +136,36 @@ fun InpaintScreen(
     var brushSizeDpValue by remember { mutableStateOf(30f) }
     var isDrawing by remember { mutableStateOf(false) }
     val currentPathPoints = remember { mutableStateListOf<Offset>() }
-    val pathHistory = remember { mutableStateListOf<Pair<List<Offset>, Float>>() }
 
-    val maskPaint = remember {
+    val pathHistory = remember {
+        mutableStateListOf<PathData>().apply {
+            existingPathHistory?.let { addAll(it) }
+        }
+    }
+    val redoStack = remember { mutableStateListOf<PathData>() }
+
+    val brushPaint = remember {
+        Paint().apply {
+            color = brushColor
+            style = Paint.Style.STROKE
+            strokeCap = Paint.Cap.ROUND
+            strokeJoin = Paint.Join.ROUND
+            isAntiAlias = true
+            xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC)
+        }
+    }
+
+    val eraserPaint = remember {
+        Paint().apply {
+            style = Paint.Style.STROKE
+            strokeCap = Paint.Cap.ROUND
+            strokeJoin = Paint.Join.ROUND
+            isAntiAlias = true
+            xfermode = PorterDuffXfermode(PorterDuff.Mode.CLEAR)
+        }
+    }
+
+    val finalPaint = remember {
         Paint().apply {
             color = Color.WHITE
             style = Paint.Style.STROKE
@@ -99,18 +176,29 @@ fun InpaintScreen(
         }
     }
 
-    val clearPaint = remember {
-        Paint().apply {
-            xfermode = PorterDuffXfermode(PorterDuff.Mode.CLEAR)
-        }
-    }
-
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     var imageRect by remember { mutableStateOf<Rect?>(null) }
     var canvasWidth by remember { mutableStateOf(0f) }
     var canvasHeight by remember { mutableStateOf(0f) }
+
+    var displayUpdateTrigger by remember { mutableStateOf(0) }
+
+    fun updateAllBrushPaths(newColor: Int) {
+        pathHistory.forEachIndexed { index, pathData ->
+            if (pathData.mode == ToolMode.BRUSH) {
+                pathHistory[index] = pathData.copy(color = newColor)
+            }
+        }
+    }
+
+    LaunchedEffect(brushColor) {
+        brushPaint.color = brushColor
+        updateAllBrushPaths(brushColor)
+        sharedPrefs.edit().putInt("brush_color", brushColor).apply()
+        displayUpdateTrigger++
+    }
 
     fun mapToImageCoordinate(canvasPoint: Offset): Offset? {
         val rect = imageRect ?: return null
@@ -145,25 +233,36 @@ fun InpaintScreen(
         val canvas = Canvas(tempBitmap)
         canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
 
-        pathHistory.forEach { (points, pathBrushDpValue) ->
-            if (points.size > 1) {
-                maskPaint.strokeWidth = convertDpToImagePixels(
-                    pathBrushDpValue,
+        pathHistory.forEach { pathData ->
+            if (pathData.points.size > 1) {
+                val paint = when (pathData.mode) {
+                    ToolMode.BRUSH -> brushPaint.apply { color = pathData.color }
+                    ToolMode.ERASER -> eraserPaint
+                }
+
+                paint.strokeWidth = convertDpToImagePixels(
+                    pathData.size,
                     currentDensity,
                     currentImageRect,
                     originalBitmap.width
                 )
+
                 androidPath.reset()
-                androidPath.moveTo(points[0].x, points[0].y)
-                for (i in 1 until points.size) {
-                    androidPath.lineTo(points[i].x, points[i].y)
+                androidPath.moveTo(pathData.points[0].x, pathData.points[0].y)
+                for (i in 1 until pathData.points.size) {
+                    androidPath.lineTo(pathData.points[i].x, pathData.points[i].y)
                 }
-                canvas.drawPath(androidPath, maskPaint)
+                canvas.drawPath(androidPath, paint)
             }
         }
 
         if (isDrawing && currentPathPoints.size > 1) {
-            maskPaint.strokeWidth = convertDpToImagePixels(
+            val paint = when (currentToolMode) {
+                ToolMode.BRUSH -> brushPaint
+                ToolMode.ERASER -> eraserPaint
+            }
+
+            paint.strokeWidth = convertDpToImagePixels(
                 brushSizeDpValue,
                 currentDensity,
                 currentImageRect,
@@ -174,7 +273,7 @@ fun InpaintScreen(
             for (i in 1 until currentPathPoints.size) {
                 androidPath.lineTo(currentPathPoints[i].x, currentPathPoints[i].y)
             }
-            canvas.drawPath(androidPath, maskPaint)
+            canvas.drawPath(androidPath, paint)
         }
 
         displayMaskBitmap = tempBitmap.copy(tempBitmap.config ?: Bitmap.Config.ARGB_8888, true).asImageBitmap()
@@ -188,30 +287,27 @@ fun InpaintScreen(
                 val finalMaskCanvas = Canvas(maskBitmap)
                 finalMaskCanvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
 
-                val finalPaint = Paint().apply {
-                    color = Color.WHITE
-                    style = Paint.Style.STROKE
-                    strokeCap = Paint.Cap.ROUND
-                    strokeJoin = Paint.Join.ROUND
-                    isAntiAlias = true
-                    xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC)
-                }
+                for (pathData in pathHistory) {
+                    if (pathData.points.isEmpty()) continue
 
-                pathHistory.forEach { (points, pathBrushDpValue) ->
-                    if (points.isNotEmpty()) {
-                        finalPaint.strokeWidth = convertDpToImagePixels(
-                            pathBrushDpValue,
-                            density,
-                            imageRect,
-                            originalBitmap.width
-                        )
-                        androidPath.reset()
-                        androidPath.moveTo(points[0].x, points[0].y)
-                        for (i in 1 until points.size) {
-                            androidPath.lineTo(points[i].x, points[i].y)
-                        }
-                        finalMaskCanvas.drawPath(androidPath, finalPaint)
+                    val paint = when (pathData.mode) {
+                        ToolMode.BRUSH -> finalPaint
+                        ToolMode.ERASER -> eraserPaint
                     }
+
+                    paint.strokeWidth = convertDpToImagePixels(
+                        pathData.size,
+                        density,
+                        imageRect,
+                        originalBitmap.width
+                    )
+
+                    androidPath.reset()
+                    androidPath.moveTo(pathData.points[0].x, pathData.points[0].y)
+                    for (i in 1 until pathData.points.size) {
+                        androidPath.lineTo(pathData.points[i].x, pathData.points[i].y)
+                    }
+                    finalMaskCanvas.drawPath(androidPath, paint)
                 }
 
                 val base64String = withContext(Dispatchers.IO) {
@@ -220,7 +316,7 @@ fun InpaintScreen(
                     val byteArray = byteArrayOutputStream.toByteArray()
                     Base64.getEncoder().encodeToString(byteArray)
                 }
-                onInpaintComplete(base64String, originalBitmap, maskBitmap)
+                onInpaintComplete(base64String, originalBitmap, maskBitmap, pathHistory.toList())
             } catch (e: Exception) {
                 errorMessage = "Error: ${e.message}"
                 e.printStackTrace()
@@ -232,24 +328,68 @@ fun InpaintScreen(
 
     fun undoLastPath(currentDensity: Density, currentImageRect: Rect?) {
         if (pathHistory.isNotEmpty()) {
-            pathHistory.removeAt(pathHistory.size - 1)
+            val lastPath = pathHistory.removeAt(pathHistory.size - 1)
+            redoStack.add(lastPath)
             updateDisplayMask(currentDensity, currentImageRect)
         }
     }
 
-    fun clearAllPaths(currentDensity: Density, currentImageRect: Rect?) {
-        if (pathHistory.isNotEmpty()){
-            pathHistory.clear()
-            currentPathPoints.clear()
-            isDrawing = false
+    fun redoLastPath(currentDensity: Density, currentImageRect: Rect?) {
+        if (redoStack.isNotEmpty()) {
+            val pathToRedo = redoStack.removeAt(redoStack.size - 1)
+            pathHistory.add(pathToRedo)
             updateDisplayMask(currentDensity, currentImageRect)
         }
     }
 
     BackHandler { onCancel() }
 
-    LaunchedEffect(pathHistory.size, currentPathPoints.size, isDrawing, imageRect, density) {
+    LaunchedEffect(pathHistory.size, currentPathPoints.size, isDrawing, imageRect, density, displayUpdateTrigger, currentToolMode) {
         updateDisplayMask(density, imageRect)
+    }
+
+    if (showColorPicker) {
+        AlertDialog(
+            onDismissRequest = { showColorPicker = false },
+            title = { Text(stringResource(R.string.brush_color)) },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(4),
+                        contentPadding = PaddingValues(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(colorOptions.size) { index ->
+                            val color = colorOptions[index]
+                            Box(
+                                modifier = Modifier
+                                    .padding(8.dp)
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(ComposeColor(color))
+                                    .border(
+                                        width = 2.dp,
+                                        color = if (color == brushColor) ComposeColor.Black else ComposeColor.Transparent,
+                                        shape = CircleShape
+                                    )
+                                    .clickable {
+                                        brushColor = color
+                                        showColorPicker = false
+                                    }
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showColorPicker = false }) {
+                    Text(stringResource(R.string.close))
+                }
+            }
+        )
     }
 
     Scaffold(
@@ -337,6 +477,7 @@ fun InpaintScreen(
                                             isDrawing = true
                                             currentPathPoints.clear()
                                             currentPathPoints.add(imagePoint)
+                                            redoStack.clear()
                                         } else {
                                             isDrawing = false
                                         }
@@ -354,7 +495,14 @@ fun InpaintScreen(
                                         if (isDrawing) {
                                             isDrawing = false
                                             if (currentPathPoints.isNotEmpty()) {
-                                                pathHistory.add(Pair(currentPathPoints.toList(), brushSizeDpValue))
+                                                pathHistory.add(
+                                                    PathData(
+                                                        points = currentPathPoints.toList(),
+                                                        size = brushSizeDpValue,
+                                                        mode = currentToolMode,
+                                                        color = brushColor
+                                                    )
+                                                )
                                                 currentPathPoints.clear()
                                             }
                                         }
@@ -363,7 +511,14 @@ fun InpaintScreen(
                                         if (isDrawing) {
                                             isDrawing = false
                                             if (currentPathPoints.isNotEmpty()) {
-                                                pathHistory.add(Pair(currentPathPoints.toList(), brushSizeDpValue))
+                                                pathHistory.add(
+                                                    PathData(
+                                                        points = currentPathPoints.toList(),
+                                                        size = brushSizeDpValue,
+                                                        mode = currentToolMode,
+                                                        color = brushColor
+                                                    )
+                                                )
                                                 currentPathPoints.clear()
                                             }
                                         }
@@ -405,27 +560,114 @@ fun InpaintScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(
-                                stringResource(R.string.brush_size),
-                                style = MaterialTheme.typography.labelLarge,
-                                modifier = Modifier.width(100.dp)
-                            )
-                            Slider(
-                                value = brushSizeDpValue,
-                                onValueChange = { brushSizeDpValue = it },
-                                valueRange = 5f..50f,
-                                modifier = Modifier.weight(1f)
-                            )
-                            val indicatorSize = with(density) { brushSizeDpValue.dp }
+                            Row(
+                                modifier = Modifier.width(80.dp),
+                                horizontalArrangement = Arrangement.SpaceEvenly
+                            ) {
+                                Box(
+                                    modifier = Modifier.size(36.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (currentToolMode == ToolMode.BRUSH) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(36.dp)
+                                                .clip(CircleShape)
+                                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
+                                        )
+                                    }
+
+                                    IconButton(
+                                        onClick = { currentToolMode = ToolMode.BRUSH },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Brush,
+                                            contentDescription = "Brush Tool",
+                                            tint = if (currentToolMode == ToolMode.BRUSH)
+                                                MaterialTheme.colorScheme.primary
+                                            else
+                                                MaterialTheme.colorScheme.onSurface,
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                    }
+                                }
+
+                                Box(
+                                    modifier = Modifier.size(36.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (currentToolMode == ToolMode.ERASER) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(36.dp)
+                                                .clip(CircleShape)
+                                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
+                                        )
+                                    }
+
+                                    IconButton(
+                                        onClick = { currentToolMode = ToolMode.ERASER },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Delete,
+                                            contentDescription = "Eraser Tool",
+                                            tint = if (currentToolMode == ToolMode.ERASER)
+                                                MaterialTheme.colorScheme.primary
+                                            else
+                                                MaterialTheme.colorScheme.onSurface,
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                    }
+                                }
+                            }
+
                             Box(
                                 modifier = Modifier
-                                    .padding(start = 16.dp)
-                                    .size(indicatorSize)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
-                            )
+                                    .weight(1f)
+                                    .padding(horizontal = 8.dp)
+                            ) {
+                                Slider(
+                                    value = brushSizeDpValue,
+                                    onValueChange = { brushSizeDpValue = it },
+                                    valueRange = 5f..50f,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .width(50.dp)
+                                    .padding(start = 4.dp)
+                                    .aspectRatio(1f),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                val indicatorSize = with(density) { brushSizeDpValue.dp }
+                                Box(
+                                    modifier = Modifier
+                                        .size(indicatorSize.coerceAtMost(50.dp))
+                                        .clip(CircleShape)
+                                        .background(
+                                            if (currentToolMode == ToolMode.BRUSH)
+                                                ComposeColor(brushColor)
+                                            else
+                                                ComposeColor.LightGray.copy(alpha = 0.5f)
+                                        )
+                                        .border(
+                                            width = 1.dp,
+                                            color = ComposeColor.DarkGray.copy(alpha = 0.3f),
+                                            shape = CircleShape
+                                        )
+                                        .clickable(enabled = currentToolMode == ToolMode.BRUSH) {
+                                            if (currentToolMode == ToolMode.BRUSH) {
+                                                showColorPicker = true
+                                            }
+                                        }
+                                )
+                            }
                         }
 
                         Row(
@@ -447,13 +689,13 @@ fun InpaintScreen(
                             }
 
                             Button(
-                                onClick = { clearAllPaths(currentDensity, currentImageRect) },
-                                enabled = pathHistory.isNotEmpty() && !isLoading,
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                                onClick = { redoLastPath(currentDensity, currentImageRect) },
+                                enabled = redoStack.isNotEmpty() && !isLoading,
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
                             ) {
-                                Icon(Icons.Default.Clear, contentDescription = "Clear", modifier = Modifier.size(ButtonDefaults.IconSize))
+                                Icon(Icons.Default.Redo, contentDescription = "Redo", modifier = Modifier.size(ButtonDefaults.IconSize))
                                 Spacer(modifier = Modifier.width(ButtonDefaults.IconSpacing))
-                                Text(stringResource(R.string.clear))
+                                Text(stringResource(R.string.redo))
                             }
                         }
                     }
@@ -464,7 +706,7 @@ fun InpaintScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.6f))
+                        .background(ComposeColor.Black.copy(alpha = 0.6f))
                         .pointerInput(Unit) {},
                     contentAlignment = Alignment.Center
                 ) {

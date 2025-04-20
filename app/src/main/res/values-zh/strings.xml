@@ -65,7 +65,9 @@
     <string name="inpaint_hint">在图像上涂抹你想要重绘的区域</string>
     <string name="brush_size">笔刷大小</string>
     <string name="undo">撤销</string>
+    <string name="redo">重做</string>
     <string name="clear">清除</string>
+    <string name="brush_color">笔刷颜色</string>
 
 
     <!-- Run Screen -->
