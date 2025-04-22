@@ -3,6 +3,7 @@
 
 #include <QnnSampleApp.hpp>
 #include <QnnTypeMacros.hpp>
+#include <HTP/QnnHtpDevice.h>
 #include <Config.hpp>
 
 #include <inttypes.h>
@@ -44,6 +45,94 @@ public:
                      debugMode,
                      logPath,
                      targetArchitecture) {}
+
+  StatusCode enablePerformaceMode()
+  {
+    uint32_t powerConfigId;
+    uint32_t deviceId = 0;
+    uint32_t coreId = 0;
+    auto qnnInterface = m_qnnFunctionPointers.qnnInterface;
+
+    QnnDevice_Infrastructure_t deviceInfra = nullptr;
+    Qnn_ErrorHandle_t devErr = qnnInterface.deviceGetInfrastructure(&deviceInfra);
+    if (devErr != QNN_SUCCESS)
+    {
+      QNN_ERROR("device error");
+      return StatusCode::FAILURE;
+    }
+    QnnHtpDevice_Infrastructure_t *htpInfra = static_cast<QnnHtpDevice_Infrastructure_t *>(deviceInfra);
+    QnnHtpDevice_PerfInfrastructure_t perfInfra = htpInfra->perfInfra;
+    Qnn_ErrorHandle_t perfInfraErr = perfInfra.createPowerConfigId(deviceId, coreId, &powerConfigId);
+    if (perfInfraErr != QNN_SUCCESS)
+    {
+      QNN_ERROR("createPowerConfigId failed");
+      return StatusCode::FAILURE;
+    }
+    QnnHtpPerfInfrastructure_PowerConfig_t rpcControlLatency;
+    memset(&rpcControlLatency, 0, sizeof(rpcControlLatency));
+    rpcControlLatency.option = QNN_HTP_PERF_INFRASTRUCTURE_POWER_CONFIGOPTION_RPC_CONTROL_LATENCY;
+    rpcControlLatency.rpcControlLatencyConfig = 100;
+    const QnnHtpPerfInfrastructure_PowerConfig_t *powerConfigs1[] = {&rpcControlLatency, NULL};
+    perfInfraErr = perfInfra.setPowerConfig(powerConfigId, powerConfigs1);
+    if (perfInfraErr != QNN_SUCCESS)
+    {
+      QNN_ERROR("setPowerConfig failed");
+      return StatusCode::FAILURE;
+    }
+
+    QnnHtpPerfInfrastructure_PowerConfig_t rpcPollingTime;
+    memset(&rpcPollingTime, 0, sizeof(rpcPollingTime));
+    rpcPollingTime.option = QNN_HTP_PERF_INFRASTRUCTURE_POWER_CONFIGOPTION_RPC_POLLING_TIME;
+    rpcPollingTime.rpcPollingTimeConfig = 9999;
+    const QnnHtpPerfInfrastructure_PowerConfig_t *powerConfigs2[] = {&rpcPollingTime, NULL};
+    perfInfraErr = perfInfra.setPowerConfig(powerConfigId, powerConfigs2);
+    if (perfInfraErr != QNN_SUCCESS)
+    {
+      QNN_ERROR("setPowerConfig failed");
+      return StatusCode::FAILURE;
+    }
+
+    QnnHtpPerfInfrastructure_PowerConfig_t powerConfig;
+    memset(&powerConfig, 0, sizeof(powerConfig));
+    powerConfig.option = QNN_HTP_PERF_INFRASTRUCTURE_POWER_CONFIGOPTION_DCVS_V3;
+    powerConfig.dcvsV3Config.dcvsEnable = 0;
+    powerConfig.dcvsV3Config.setDcvsEnable = 1;
+    powerConfig.dcvsV3Config.contextId = powerConfigId;
+    powerConfig.dcvsV3Config.powerMode = QNN_HTP_PERF_INFRASTRUCTURE_POWERMODE_PERFORMANCE_MODE;
+    powerConfig.dcvsV3Config.setSleepLatency = 1;
+    powerConfig.dcvsV3Config.setBusParams = 1;
+    powerConfig.dcvsV3Config.setCoreParams = 1;
+    powerConfig.dcvsV3Config.sleepDisable = 1;
+    powerConfig.dcvsV3Config.setSleepDisable = 1;
+    powerConfig.dcvsV3Config.sleepLatency = 40;
+    powerConfig.dcvsV3Config.busVoltageCornerMin = DCVS_VOLTAGE_VCORNER_MAX_VOLTAGE_CORNER;
+    powerConfig.dcvsV3Config.busVoltageCornerTarget = DCVS_VOLTAGE_VCORNER_MAX_VOLTAGE_CORNER;
+    powerConfig.dcvsV3Config.busVoltageCornerMax = DCVS_VOLTAGE_VCORNER_MAX_VOLTAGE_CORNER;
+    powerConfig.dcvsV3Config.coreVoltageCornerMin = DCVS_VOLTAGE_VCORNER_MAX_VOLTAGE_CORNER;
+    powerConfig.dcvsV3Config.coreVoltageCornerTarget = DCVS_VOLTAGE_VCORNER_MAX_VOLTAGE_CORNER;
+    powerConfig.dcvsV3Config.coreVoltageCornerMax = DCVS_VOLTAGE_VCORNER_MAX_VOLTAGE_CORNER;
+    const QnnHtpPerfInfrastructure_PowerConfig_t *powerConfigs3[] = {&powerConfig, NULL};
+    perfInfraErr = perfInfra.setPowerConfig(powerConfigId, powerConfigs3);
+    if (perfInfraErr != QNN_SUCCESS)
+    {
+      QNN_ERROR("setPowerConfig failed");
+      return StatusCode::FAILURE;
+    }
+
+    QnnHtpPerfInfrastructure_PowerConfig_t adaptivePollingTime;
+    memset(&adaptivePollingTime, 0, sizeof(adaptivePollingTime));
+    adaptivePollingTime.option = QNN_HTP_PERF_INFRASTRUCTURE_POWER_CONFIGOPTION_ADAPTIVE_POLLING_TIME;
+    adaptivePollingTime.adaptivePollingTimeConfig = 1000;
+    const QnnHtpPerfInfrastructure_PowerConfig_t *powerConfigs4[] = {&adaptivePollingTime, NULL};
+    perfInfraErr = perfInfra.setPowerConfig(powerConfigId, powerConfigs4);
+    if (perfInfraErr != QNN_SUCCESS)
+    {
+      QNN_ERROR("setPowerConfig failed");
+      return StatusCode::FAILURE;
+    }
+
+    return StatusCode::SUCCESS;
+  }
 
   StatusCode executeClipOnce(
       ClipInput &clip_input,

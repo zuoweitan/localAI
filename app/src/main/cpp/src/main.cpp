@@ -114,6 +114,10 @@ namespace qnn
             return app->reportError(appType + " Create From Binary failure");
           }
         }
+        if (sample_app::StatusCode::SUCCESS != app->enablePerformaceMode())
+        {
+          return app->reportError(appType + " Enable Performance Mode failure");
+        }
         return EXIT_SUCCESS;
       }
 
@@ -1102,6 +1106,14 @@ GenerationResult generateImageMNN(
     MNN::Interpreter *safetyCheckerInterpreter,
     std::function<void(int step, int total_steps)> progress_callback)
 {
+  MNN::ScheduleConfig config_2;
+  config_2.type = MNN_FORWARD_CPU;
+  config_2.numThread = 1;
+  MNN::BackendConfig backendConfig;
+  backendConfig.memory = MNN::BackendConfig::Memory_Low;
+  backendConfig.power = MNN::BackendConfig::Power_High;
+  config_2.backendConfig = &backendConfig;
+
   using namespace qnn::tools::sample_app;
   if (use_safety_checker && safetyCheckerInterpreter == nullptr)
   {
@@ -1140,6 +1152,7 @@ GenerationResult generateImageMNN(
 
     clip_input_ids = processPrompt(prompt, negative_prompt, 77, use_cfg);
 
+    clipSession = clipInterpreter->createSession(config_2);
     auto input_ids = clipInterpreter->getSessionInput(clipSession, "input_ids");
     clipInterpreter->resizeTensor(input_ids, {1, 77});
     clipInterpreter->resizeSession(clipSession);
@@ -1161,6 +1174,7 @@ GenerationResult generateImageMNN(
     std::cout << "CLIP runSession duration: " << duration.count() << "ms" << std::endl;
     text_embedding_tensor = clipInterpreter->getSessionOutput(clipSession, "last_hidden_state");
     memcpy(text_embedding.data() + 77 * text_embedding_size, text_embedding_tensor->host<float>(), 77 * text_embedding_size * sizeof(float));
+    clipInterpreter->releaseSession(clipSession);
 
     current_step++;
     if (progress_callback)
@@ -1201,6 +1215,7 @@ GenerationResult generateImageMNN(
       vae_encoder_output.mean.resize(1 * 4 * sample_size * sample_size);
       vae_encoder_output.std.resize(1 * 4 * sample_size * sample_size);
       auto start = std::chrono::high_resolution_clock::now();
+      vaeEncoderSession = vaeEncoderInterpreter->createSession(config_2);
       auto input = vaeEncoderInterpreter->getSessionInput(vaeEncoderSession, "input");
       vaeEncoderInterpreter->resizeTensor(input, {1, 3, output_size, output_size});
       vaeEncoderInterpreter->resizeSession(vaeEncoderSession);
@@ -1214,6 +1229,7 @@ GenerationResult generateImageMNN(
       auto std = vaeEncoderInterpreter->getSessionOutput(vaeEncoderSession, "std");
       memcpy(vae_encoder_output.mean.data(), mean->host<float>(), 4 * sample_size * sample_size * sizeof(float));
       memcpy(vae_encoder_output.std.data(), std->host<float>(), 4 * sample_size * sample_size * sizeof(float));
+      vaeEncoderInterpreter->releaseSession(vaeEncoderSession);
       xt::xarray<float> noise_0 = xt::random::randn<float>(shape);
       xt::xarray<float> mean_xt = xt::adapt(vae_encoder_output.mean, {1, 4, sample_size, sample_size});
       xt::xarray<float> std_xt = xt::adapt(vae_encoder_output.std, {1, 4, sample_size, sample_size});
@@ -1307,6 +1323,7 @@ GenerationResult generateImageMNN(
     latents = xt::eval((1 / 0.18215) * latents);
     vae_decoder_input = std::vector<float>(latents.begin(), latents.end());
 
+    vaeDecoderSession = vaeDecoderInterpreter->createSession(config_2);
     auto vae_input_tensor = vaeDecoderInterpreter->getSessionInput(vaeDecoderSession, "latent_sample");
     vaeDecoderInterpreter->resizeTensor(vae_input_tensor, {1, 4, sample_size, sample_size});
     vaeDecoderInterpreter->resizeSession(vaeDecoderSession);
@@ -1320,6 +1337,7 @@ GenerationResult generateImageMNN(
     auto vae_output_tensor = vaeDecoderInterpreter->getSessionOutput(vaeDecoderSession, "sample");
     vae_decoder_output.resize(3 * output_size * output_size);
     memcpy(vae_decoder_output.data(), vae_output_tensor->host<float>(), 3 * output_size * output_size * sizeof(float));
+    vaeDecoderInterpreter->releaseSession(vaeDecoderSession);
 
     xt::xarray<float> pixel_values = xt::adapt(vae_decoder_output, {1, 3, output_size, output_size});
     if (has_mask)
@@ -1434,9 +1452,9 @@ int main(int argc, char **argv)
       return EXIT_FAILURE;
     }
 
-    clipSession = clipApp->createSession(config_2);
+    // clipSession = clipApp->createSession(config_2);
     unetSession = unetApp->createSession(config_1);
-    vaeDecoderSession = vaeDecoderApp->createSession(config_2);
+    // vaeDecoderSession = vaeDecoderApp->createSession(config_2);
     if (img2img)
     {
       if (!vaeEncoderApp)
@@ -1444,7 +1462,7 @@ int main(int argc, char **argv)
         std::cerr << "Failed to load VAE Encoder MNN model" << std::endl;
         return EXIT_FAILURE;
       }
-      vaeEncoderSession = vaeEncoderApp->createSession(config_2);
+      // vaeEncoderSession = vaeEncoderApp->createSession(config_2);
     }
     httplib::Server svr;
 
