@@ -613,7 +613,7 @@ fun InpaintScreen(
                                         modifier = Modifier.size(36.dp)
                                     ) {
                                         Icon(
-                                            Icons.Default.Delete,
+                                            Icons.Default.FormatPaint,
                                             contentDescription = "Eraser Tool",
                                             tint = if (currentToolMode == ToolMode.ERASER)
                                                 MaterialTheme.colorScheme.primary
