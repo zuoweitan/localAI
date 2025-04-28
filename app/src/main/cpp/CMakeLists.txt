@@ -93,6 +93,8 @@ set(MNN_BUILD_FOR_ANDROID_COMMAND ON CACHE bool "" FORCE)
 set(MNN_USE_LOGCAT OFF CACHE bool "" FORCE)
 add_subdirectory(3rdparty/MNN)
 
+set(XTENSOR_USE_XSIMD ON)
+
 set(PACKAGE_INCLUDES
     ${MNN_ROOT_DIR}/include
     ${QNN_SDK_ROOT}/include/QNN
@@ -104,6 +106,7 @@ set(PACKAGE_INCLUDES
     ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/stb
     ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/xtensor/include
     ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/xtl/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/xsimd/include
 
     ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/SampleApp/src/
     ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/SampleApp/src/CachingUtil
@@ -192,6 +195,11 @@ target_include_directories(${PROJECT_NAME} PRIVATE ${PACKAGE_INCLUDES})
 set_target_properties(${PROJECT_NAME}
     PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/${OUTPUT_SUFFIX}"
+)
+
+target_compile_definitions(${PROJECT_NAME}
+    PRIVATE
+    XTENSOR_USE_XSIMD
 )
 
 # link
