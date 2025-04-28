@@ -369,7 +369,7 @@ fun ModelRunScreen(
     var offsetX by remember { mutableStateOf(0f) }
     var offsetY by remember { mutableStateOf(0f) }
     val preferences = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
-    val useImg2img = preferences.getBoolean("use_img2img", false)
+    val useImg2img = preferences.getBoolean("use_img2img", true)
 
     var showCropScreen by remember { mutableStateOf(false) }
     var imageUriForCrop by remember { mutableStateOf<Uri?>(null) }

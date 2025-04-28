@@ -91,7 +91,6 @@ data class Model(
             }
         } catch (e: Exception) {
             fileVerification.clearVerification(id)
-            modelDir.deleteRecursively()
             emit(DownloadResult.Error(e.message ?: "Download failed"))
         }
     }.flowOn(Dispatchers.IO)

@@ -202,7 +202,7 @@ class BackendService : Service() {
             }
 
             val preferences = this.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
-            val useImg2img = preferences.getBoolean("use_img2img", false)
+            val useImg2img = preferences.getBoolean("use_img2img", true)
 
             var clipfilename = "clip.bin"
             if (model.useCpuClip) {
