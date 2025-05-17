@@ -191,20 +191,11 @@ class ModelRepository(private val context: Context) {
     }
 
     private fun initializeModels(): List<Model> {
-        if (BuildConfig.FLAVOR == "filter") {
-            return listOf(
-                createAnythingV5Model(),
-                createAnythingV5ModelCPU(),
-                createAbsoluteRealityModel(),
-                createAbsoluteRealityModelCPU(),
-                createChilloutMixModelCPU(),
-                createChilloutMixModel(),
-                createSD21Model(),
-            )
-        }
-        return listOf(
+        var modelList = listOf(
             createAnythingV5Model(),
             createAnythingV5ModelCPU(),
+            createQteaMixModel(),
+            createQteaMixModelCPU(),
             createAbsoluteRealityModel(),
             createAbsoluteRealityModelCPU(),
             createChilloutMixModelCPU(),
@@ -212,6 +203,12 @@ class ModelRepository(private val context: Context) {
             createPonyV55Model(),
             createSD21Model(),
         )
+        if (BuildConfig.FLAVOR == "filter") {
+            modelList = modelList.filter { model ->
+                model.id != "ponyv55_640"
+            }
+        }
+        return modelList
     }
     private fun createAnythingV5Model(): Model {
         val id = "anythingv5"
@@ -311,7 +308,103 @@ class ModelRepository(private val context: Context) {
             runOnCpu = true
         )
     }
+    private fun createQteaMixModel(): Model {
+        val id = "qteamix"
+        val soc = getDeviceSoc()
+        val files = listOf(
+            ModelFile(
+                "tokenizer.json",
+                "tokenizer",
+                "xororz/QteaMix/resolve/main/tokenizer.json"
+            ),
+            ModelFile(
+                "clip.mnn",
+                "clip",
+                "xororz/QteaMix/resolve/main/clip_fp16.mnn"
+            ),
+            ModelFile(
+                "vae_encoder.bin",
+                "vae_encoder",
+                "xororz/AnythingV5/resolve/main/vae_encoder_${chipsetModelSuffixes[soc]}.bin"
+            ),
+            ModelFile(
+                "vae_decoder.bin",
+                "vae_decoder",
+                "xororz/QteaMix/resolve/main/vae_decoder_${chipsetModelSuffixes[soc]}.bin"
+            ),
+            ModelFile(
+                "unet.bin",
+                "unet",
+                "xororz/QteaMix/resolve/main/unet_${chipsetModelSuffixes[soc]}.bin"
+            )
+        )
 
+        val (fullyDownloaded, partiallyDownloaded) = Model.checkModelDownloadStatus(
+            context,
+            id,
+            files
+        )
+
+        return Model(
+            id = id,
+            name = "QteaMix",
+            description = context.getString(R.string.qteamix_description),
+            baseUrl = baseUrl,
+            files = files,
+            approximateSize = "1.1GB",
+            isDownloaded = fullyDownloaded,
+            isPartiallyDownloaded = partiallyDownloaded,
+            defaultPrompt = "chibi, best quality, 1girl, solo, cute, pink hair,",
+            defaultNegativePrompt = "bad anatomy, bad hands, missing fingers, extra fingers, bad arms, missing legs, missing arms, poorly drawn face, bad face, fused face, cloned face, three crus, fused feet, fused thigh, extra crus, ugly fingers, horn, realistic photo, huge eyes, worst face, 2girl, long fingers, disconnected limbs,",
+            useCpuClip = true
+        )
+    }
+    private fun createQteaMixModelCPU(): Model {
+        val id = "qteamixcpu"
+        val files = listOf(
+            ModelFile(
+                "tokenizer.json",
+                "tokenizer",
+                "xororz/AnythingV5/resolve/main/tokenizer.json"
+            ),
+            ModelFile("clip.mnn", "clip", "xororz/QteaMix/resolve/main/clip_fp16.mnn"),
+            ModelFile(
+                "vae_encoder.mnn",
+                "vae_encoder",
+                "xororz/AnythingV5/resolve/main/vae_encoder_fp16.mnn"
+            ),
+            ModelFile(
+                "vae_decoder.mnn",
+                "vae_decoder",
+                "xororz/QteaMix/resolve/main/vae_decoder_fp16.mnn"
+            ),
+            ModelFile(
+                "unet.mnn",
+                "unet",
+                "xororz/QteaMix/resolve/main/unet_asym_block32.mnn"
+            )
+        )
+
+        val (fullyDownloaded, partiallyDownloaded) = Model.checkModelDownloadStatus(
+            context,
+            id,
+            files
+        )
+
+        return Model(
+            id = id,
+            name = "QteaMix",
+            description = context.getString(R.string.qteamix_description),
+            baseUrl = baseUrl,
+            files = files,
+            approximateSize = "1.2GB",
+            isDownloaded = fullyDownloaded,
+            isPartiallyDownloaded = partiallyDownloaded,
+            defaultPrompt = "chibi, best quality, 1girl, solo, cute, pink hair,",
+            defaultNegativePrompt = "bad anatomy, bad hands, missing fingers, extra fingers, bad arms, missing legs, missing arms, poorly drawn face, bad face, fused face, cloned face, three crus, fused feet, fused thigh, extra crus, ugly fingers, horn, realistic photo, huge eyes, worst face, 2girl, long fingers, disconnected limbs,",
+            runOnCpu = true
+        )
+    }
     private fun createAbsoluteRealityModel(): Model {
         val id = "absolutereality"
         val soc = getDeviceSoc()

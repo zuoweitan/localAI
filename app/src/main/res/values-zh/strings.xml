@@ -5,6 +5,7 @@
     <!-- Models -->
     <string name="anythingv5_description">动漫图像生成模型</string>
     <string name="chilloutmix_description">人物图像生成模型</string>
+    <string name="qteamix_description">动漫Q版风格模型</string>
     <string name="absolutereality_description">现实场景生成模型</string>
     <string name="sd21_description">通用图像生成模型</string>
     <string name="ponyv55_description">Pony Diffusion系列</string>
@@ -47,7 +48,7 @@
     <string name="cannot_download">无法下载</string>
     <string name="cannot_download_hint">当前有模型正在下载，请等待下载完成后再尝试</string>
     <string name="download_model">下载模型</string>
-    <string name="download_model_hint">确定要下载 %s 吗？模型较大，建议使用WiFi网络下载。</string>
+    <string name="download_model_hint">确定要下载 %s 吗？模型较大，建议使用WiFi网络下载。下载过程请勿退出应用程序</string>
     <string name="download_done">模型下载完成</string>
     <string name="unsupport_npu">您的设备暂不支持，请使用CPU版本</string>
     <string name="cpu_models">CPU Models</string>

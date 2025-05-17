@@ -5,6 +5,7 @@
     <!-- Models -->
     <string name="anythingv5_description">Anime Image Generation</string>
     <string name="chilloutmix_description">ChilloutMix Series</string>
+    <string name="qteamix_description">Chibi Style Generation</string>
     <string name="absolutereality_description">Realistic Image Generation</string>
     <string name="sd21_description">General Image Generation</string>
     <string name="ponyv55_description">Pony Diffusion Series</string>
@@ -47,7 +48,7 @@
     <string name="cannot_download">Cannot Download</string>
     <string name="cannot_download_hint">A model is being downloaded, please wait.</string>
     <string name="download_model">Download Model</string>
-    <string name="download_model_hint">Are you sure to download %s ?</string>
+    <string name="download_model_hint">Are you sure to download %s ? Please do not exit the application during the download process.</string>
     <string name="download_done">Download Finished</string>
     <string name="unsupport_npu">Your device is not supported. Try the CPU model please.</string>
     <string name="cpu_models">CPU Models</string>

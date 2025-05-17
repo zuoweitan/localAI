@@ -121,7 +121,12 @@ Note: Different phones have different default frequency limits for their NPUs, a
    - ChilloutMix series
 
 5. Absolute Reality
+
    - Realistic image generation
+
+6. QteaMix
+
+   - Chibi style anime generation
 
 ## Seed Settings
 
