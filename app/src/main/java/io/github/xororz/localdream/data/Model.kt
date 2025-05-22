@@ -198,6 +198,8 @@ class ModelRepository(private val context: Context) {
             createQteaMixModelCPU(),
             createAbsoluteRealityModel(),
             createAbsoluteRealityModelCPU(),
+            createCuteYukiMixModel(),
+            createCuteYukiMixModelCPU(),
             createChilloutMixModelCPU(),
             createChilloutMixModel(),
             createPonyV55Model(),
@@ -401,6 +403,103 @@ class ModelRepository(private val context: Context) {
             isDownloaded = fullyDownloaded,
             isPartiallyDownloaded = partiallyDownloaded,
             defaultPrompt = "chibi, best quality, 1girl, solo, cute, pink hair,",
+            defaultNegativePrompt = "bad anatomy, bad hands, missing fingers, extra fingers, bad arms, missing legs, missing arms, poorly drawn face, bad face, fused face, cloned face, three crus, fused feet, fused thigh, extra crus, ugly fingers, horn, realistic photo, huge eyes, worst face, 2girl, long fingers, disconnected limbs,",
+            runOnCpu = true
+        )
+    }
+    private fun createCuteYukiMixModel(): Model {
+        val id = "cuteyukimix"
+        val soc = getDeviceSoc()
+        val files = listOf(
+            ModelFile(
+                "tokenizer.json",
+                "tokenizer",
+                "xororz/CuteYukiMix/resolve/main/tokenizer.json"
+            ),
+            ModelFile(
+                "clip.mnn",
+                "clip",
+                "xororz/CuteYukiMix/resolve/main/clip_fp16.mnn"
+            ),
+            ModelFile(
+                "vae_encoder.bin",
+                "vae_encoder",
+                "xororz/AnythingV5/resolve/main/vae_encoder_${chipsetModelSuffixes[soc]}.bin"
+            ),
+            ModelFile(
+                "vae_decoder.bin",
+                "vae_decoder",
+                "xororz/CuteYukiMix/resolve/main/vae_decoder_${chipsetModelSuffixes[soc]}.bin"
+            ),
+            ModelFile(
+                "unet.bin",
+                "unet",
+                "xororz/CuteYukiMix/resolve/main/unet_${chipsetModelSuffixes[soc]}.bin"
+            )
+        )
+
+        val (fullyDownloaded, partiallyDownloaded) = Model.checkModelDownloadStatus(
+            context,
+            id,
+            files
+        )
+
+        return Model(
+            id = id,
+            name = "CuteYukiMix",
+            description = context.getString(R.string.cuteyukimix_description),
+            baseUrl = baseUrl,
+            files = files,
+            approximateSize = "1.1GB",
+            isDownloaded = fullyDownloaded,
+            isPartiallyDownloaded = partiallyDownloaded,
+            defaultPrompt = "masterpiece, best quality, 1girl, solo, cute, white hair,",
+            defaultNegativePrompt = "bad anatomy, bad hands, missing fingers, extra fingers, bad arms, missing legs, missing arms, poorly drawn face, bad face, fused face, cloned face, three crus, fused feet, fused thigh, extra crus, ugly fingers, horn, realistic photo, huge eyes, worst face, 2girl, long fingers, disconnected limbs,",
+            useCpuClip = true
+        )
+    }
+    private fun createCuteYukiMixModelCPU(): Model {
+        val id = "cuteyukimixcpu"
+        val files = listOf(
+            ModelFile(
+                "tokenizer.json",
+                "tokenizer",
+                "xororz/CuteYukiMix/resolve/main/tokenizer.json"
+            ),
+            ModelFile("clip.mnn", "clip", "xororz/QteaMix/resolve/main/clip_fp16.mnn"),
+            ModelFile(
+                "vae_encoder.mnn",
+                "vae_encoder",
+                "xororz/AnythingV5/resolve/main/vae_encoder_fp16.mnn"
+            ),
+            ModelFile(
+                "vae_decoder.mnn",
+                "vae_decoder",
+                "xororz/CuteYukiMix/resolve/main/vae_decoder_fp16.mnn"
+            ),
+            ModelFile(
+                "unet.mnn",
+                "unet",
+                "xororz/CuteYukiMix/resolve/main/unet_asym_block32.mnn"
+            )
+        )
+
+        val (fullyDownloaded, partiallyDownloaded) = Model.checkModelDownloadStatus(
+            context,
+            id,
+            files
+        )
+
+        return Model(
+            id = id,
+            name = "CuteYukiMix",
+            description = context.getString(R.string.cuteyukimix_description),
+            baseUrl = baseUrl,
+            files = files,
+            approximateSize = "1.2GB",
+            isDownloaded = fullyDownloaded,
+            isPartiallyDownloaded = partiallyDownloaded,
+            defaultPrompt = "masterpiece, best quality, 1girl, solo, cute, white hair,",
             defaultNegativePrompt = "bad anatomy, bad hands, missing fingers, extra fingers, bad arms, missing legs, missing arms, poorly drawn face, bad face, fused face, cloned face, three crus, fused feet, fused thigh, extra crus, ugly fingers, horn, realistic photo, huge eyes, worst face, 2girl, long fingers, disconnected limbs,",
             runOnCpu = true
         )

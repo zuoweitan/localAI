@@ -128,6 +128,10 @@ Note: Different phones have different default frequency limits for their NPUs, a
 
    - Chibi style anime generation
 
+7. CuteYukiMix
+
+   - Cute style anime generation
+
 ## Seed Settings
 
 The application supports custom seed settings for reproducible results:

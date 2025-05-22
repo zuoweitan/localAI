@@ -38,6 +38,26 @@ class GenerationPreferences(private val context: Context) {
             }
     }
 
+    suspend fun saveAllFields(
+        modelId: String,
+        prompt: String,
+        negativePrompt: String,
+        steps: Float,
+        cfg: Float,
+        seed: String,
+        size: Int,
+        denoiseStrength: Float
+    ) {
+        context.dataStore.edit { preferences ->
+            preferences[getPromptKey(modelId)] = prompt
+            preferences[getNegativePromptKey(modelId)] = negativePrompt
+            preferences[getStepsKey(modelId)] = steps
+            preferences[getCfgKey(modelId)] = cfg
+            preferences[getSeedKey(modelId)] = seed
+            preferences[getSizeKey(modelId)] = size
+            preferences[getDenoiseStrengthKey(modelId)] = denoiseStrength
+        }
+    }
     suspend fun savePrompt(modelId: String, prompt: String) {
         context.dataStore.edit { preferences ->
             preferences[getPromptKey(modelId)] = prompt

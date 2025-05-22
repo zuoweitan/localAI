@@ -100,6 +100,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 
 
 private suspend fun reportImage(
@@ -380,10 +381,30 @@ fun ModelRunScreen(
     var isInpaintMode by remember { mutableStateOf(false) }
     var savedPathHistory by remember { mutableStateOf<List<PathData>?>(null) }
 
+    var saveAllJob: Job? by remember { mutableStateOf(null) }
+
+    fun saveAllFields() {
+        saveAllJob?.cancel()
+        saveAllJob = scope.launch {
+            delay(500)
+            generationPreferences.saveAllFields(
+                modelId = modelId,
+                prompt = prompt,
+                negativePrompt = negativePrompt,
+                steps = steps,
+                cfg = cfg,
+                seed = seed,
+                size = size,
+                denoiseStrength = denoiseStrength
+            )
+        }
+    }
+
     fun processSelectedImage(uri: Uri) {
         imageUriForCrop = uri
         showCropScreen = true
     }
+
     fun handleCropComplete(base64String: String, bitmap: Bitmap) {
         showCropScreen = false
         selectedImageUri = imageUriForCrop
@@ -405,7 +426,13 @@ fun ModelRunScreen(
             }
         }
     }
-    fun handleInpaintComplete(maskBase64: String, originalBitmap: Bitmap, maskBmp: Bitmap, pathHistory: List<PathData>) {
+
+    fun handleInpaintComplete(
+        maskBase64: String,
+        originalBitmap: Bitmap,
+        maskBmp: Bitmap,
+        pathHistory: List<PathData>
+    ) {
         showInpaintScreen = false
         isInpaintMode = true
         maskBitmap = maskBmp
@@ -551,6 +578,7 @@ fun ModelRunScreen(
             coroutineScope.launch {
                 pagerState.scrollToPage(0)
             }
+            saveAllJob?.cancel()
         } catch (e: Exception) {
             android.util.Log.e("ModelRunScreen", "error", e)
         }
@@ -977,13 +1005,7 @@ fun ModelRunScreen(
                                                                     value = steps,
                                                                     onValueChange = {
                                                                         steps = it
-
-                                                                        scope.launch {
-                                                                            generationPreferences.saveSteps(
-                                                                                modelId,
-                                                                                steps
-                                                                            )
-                                                                        }
+                                                                        saveAllFields()
                                                                     },
                                                                     valueRange = 1f..50f,
                                                                     steps = 48,
@@ -1000,13 +1022,7 @@ fun ModelRunScreen(
                                                                     value = cfg,
                                                                     onValueChange = {
                                                                         cfg = it
-
-                                                                        scope.launch {
-                                                                            generationPreferences.saveCfg(
-                                                                                modelId,
-                                                                                cfg
-                                                                            )
-                                                                        }
+                                                                        saveAllFields()
                                                                     },
                                                                     valueRange = 1f..30f,
                                                                     steps = 57,
@@ -1044,12 +1060,7 @@ fun ModelRunScreen(
                                                                                     onClick = {
                                                                                         size =
                                                                                             sizeOption
-                                                                                        scope.launch {
-                                                                                            generationPreferences.saveSize(
-                                                                                                modelId,
-                                                                                                size
-                                                                                            )
-                                                                                        }
+                                                                                        saveAllFields()
                                                                                     },
                                                                                     label = { Text("${sizeOption}px") },
                                                                                     modifier = Modifier.weight(
@@ -1073,12 +1084,7 @@ fun ModelRunScreen(
                                                                                     onClick = {
                                                                                         size =
                                                                                             sizeOption
-                                                                                        scope.launch {
-                                                                                            generationPreferences.saveSize(
-                                                                                                modelId,
-                                                                                                size
-                                                                                            )
-                                                                                        }
+                                                                                        saveAllFields()
                                                                                     },
                                                                                     label = { Text("${sizeOption}px") },
                                                                                     modifier = Modifier.weight(
@@ -1102,12 +1108,7 @@ fun ModelRunScreen(
                                                                         value = denoiseStrength,
                                                                         onValueChange = {
                                                                             denoiseStrength = it
-                                                                            scope.launch {
-                                                                                generationPreferences.saveDenoiseStrength(
-                                                                                    modelId,
-                                                                                    denoiseStrength
-                                                                                )
-                                                                            }
+                                                                            saveAllFields()
                                                                         },
                                                                         valueRange = 0f..1f,
                                                                         steps = 99,
@@ -1125,12 +1126,7 @@ fun ModelRunScreen(
                                                                     value = seed,
                                                                     onValueChange = {
                                                                         seed = it
-                                                                        scope.launch {
-                                                                            generationPreferences.saveSeed(
-                                                                                modelId,
-                                                                                seed
-                                                                            )
-                                                                        }
+                                                                        saveAllFields()
                                                                     },
                                                                     label = { Text(stringResource(R.string.random_seed)) },
                                                                     keyboardOptions = KeyboardOptions(
@@ -1142,13 +1138,7 @@ fun ModelRunScreen(
                                                                         if (seed.isNotEmpty()) {
                                                                             IconButton(onClick = {
                                                                                 seed = ""
-                                                                                scope.launch {
-                                                                                    generationPreferences.saveSeed(
-                                                                                        modelId,
-                                                                                        seed
-                                                                                    )
-                                                                                }
-
+                                                                                saveAllFields()
                                                                             }) {
                                                                                 Icon(
                                                                                     Icons.Default.Clear,
@@ -1164,12 +1154,7 @@ fun ModelRunScreen(
                                                                         onClick = {
                                                                             seed =
                                                                                 returnedSeed.toString()
-                                                                            scope.launch {
-                                                                                generationPreferences.saveSeed(
-                                                                                    modelId,
-                                                                                    seed
-                                                                                )
-                                                                            }
+                                                                            saveAllFields()
                                                                         },
                                                                         modifier = Modifier.fillMaxWidth()
                                                                     ) {
@@ -1242,13 +1227,7 @@ fun ModelRunScreen(
                                             value = prompt,
                                             onValueChange = {
                                                 prompt = it
-
-                                                scope.launch {
-                                                    generationPreferences.savePrompt(
-                                                        modelId,
-                                                        prompt
-                                                    )
-                                                }
+                                                saveAllFields()
                                             },
                                             modifier = Modifier
                                                 .fillMaxWidth()
@@ -1281,12 +1260,7 @@ fun ModelRunScreen(
                                             value = negativePrompt,
                                             onValueChange = {
                                                 negativePrompt = it
-                                                scope.launch {
-                                                    generationPreferences.saveNegativePrompt(
-                                                        modelId,
-                                                        negativePrompt
-                                                    )
-                                                }
+                                                saveAllFields()
                                             },
                                             modifier = Modifier
                                                 .fillMaxWidth()
@@ -1475,7 +1449,9 @@ fun ModelRunScreen(
                                                     } else {
                                                         selectedImageUri?.let { uri ->
                                                             AsyncImage(
-                                                                model = ImageRequest.Builder(LocalContext.current)
+                                                                model = ImageRequest.Builder(
+                                                                    LocalContext.current
+                                                                )
                                                                     .data(uri)
                                                                     .crossfade(true)
                                                                     .build(),
@@ -1522,7 +1498,11 @@ fun ModelRunScreen(
                                                             if (croppedBitmap != null) {
                                                                 showInpaintScreen = true
                                                             } else {
-                                                                Toast.makeText(context, "Please Crop First", Toast.LENGTH_SHORT).show()
+                                                                Toast.makeText(
+                                                                    context,
+                                                                    "Please Crop First",
+                                                                    Toast.LENGTH_SHORT
+                                                                ).show()
                                                             }
                                                         },
                                                         shape = CircleShape,
