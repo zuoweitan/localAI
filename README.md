@@ -93,9 +93,7 @@ open this project in android studio and click Build/Generate App Bundles or APKs
 - Devices with Snapdragon 8 Gen 3
 - Devices with Snapdragon 8 Elite
 
-Other devices are not able to download the npu models.
-
-Note: Different phones have different default frequency limits for their NPUs, and the same chip from different manufacturers may have varying inference speeds.
+**Other devices are not able to download the npu models.**
 
 ### CPU Support
 
@@ -104,33 +102,15 @@ Note: Different phones have different default frequency limits for their NPUs, a
 
 ## Available Models
 
-1. Anything V5.0
-
-   - Specialized for anime/manga style image generation
-
-2. Stable Diffusion 2.1
-
-   - General-purpose image generation
-
-3. Pony V5.5
-
-   - Pony Diffusion series
-
-4. ChilloutMix
-
-   - ChilloutMix series
-
-5. Absolute Reality
-
-   - Realistic image generation
-
-6. QteaMix
-
-   - Chibi style anime generation
-
-7. CuteYukiMix
-
-   - Cute style anime generation
+| Model                | Type  | CPU | NPU | Source                                                                   |
+| -------------------- | ----- | --- | --- | ------------------------------------------------------------------------ |
+| Anything V5.0        | SD1.5 | ✅  | ✅  | https://civitai.com/models/9409?modelVersionId=30163                     |
+| ChilloutMix          | SD1.5 | ✅  | ✅  | https://civitai.com/models/6424/chilloutmix?modelVersionId=11732         |
+| Absolute Reality     | SD1.5 | ✅  | ✅  | https://civitai.com/models/81458?modelVersionId=132760                   |
+| QteaMix              | SD1.5 | ✅  | ✅  | https://civitai.com/models/50696/qteamix-q?modelVersionId=94654          |
+| CuteYukiMix          | SD1.5 | ✅  | ✅  | https://civitai.com/models/28169?modelVersionId=265102                   |
+| Stable Diffusion 2.1 | SD2.1 | -   | ✅  | https://huggingface.co/stabilityai/stable-diffusion-2-1/tree/main        |
+| Pony V5.5            | SD2.1 | -   | ✅  | https://civitai.com/models/95367/pony-diffusion-v5?modelVersionId=205936 |
 
 ## Seed Settings
 
