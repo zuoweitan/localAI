@@ -43,10 +43,13 @@ val chipsetModelSuffixes = mapOf(
     "SM8475" to "8gen1",
     "SM8450" to "8gen1",
     "SM8550" to "8gen2",
+    "SM8550P" to "8gen2",
     "QCS8550" to "8gen2",
     "QCM8550" to "8gen2",
     "SM8650" to "8gen3",
+    "SM8650P" to "8gen3",
     "SM8750" to "8gen4",
+    "SM8750P" to "8gen4",
 )
 
 sealed class DownloadResult {
@@ -642,7 +645,7 @@ class ModelRepository(private val context: Context) {
             approximateSize = "1.1GB",
             isDownloaded = fullyDownloaded,
             isPartiallyDownloaded = partiallyDownloaded,
-            defaultPrompt = "RAW photo, best quality, realistic, photo-realistic, masterpiece, extremely detailed, CG, unity, 8k wallpaper, ultra-detailed, highres, absurdres, 1girl, silver hair,",
+            defaultPrompt = "RAW photo, best quality, realistic, photo-realistic, masterpiece, 1girl, upper body, facing front, portrait,",
             defaultNegativePrompt = "paintings, sketches, worst quality, low quality, normal quality, lowres, monochrome, grayscale, skin spots, acnes, skin blemishes, age spot, bad anatomy, bad hands, bad body, bad proportions, gross proportions, extra fingers, fewer fingers, extra digit, missing fingers, fused fingers, extra arms, missing arms, extra legs, missing legs, extra limbs, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, blurry, watermark, white letters, signature, text, error, jpeg artifacts, duplicate, morbid, mutilated, cross-eyed, long neck, ng_deepnegative_v1_75t, easynegative, bad-picture-chill-75v, bad-artist",
             runOnCpu = false,
             useCpuClip = true,
@@ -690,7 +693,7 @@ class ModelRepository(private val context: Context) {
             approximateSize = "1.2GB",
             isDownloaded = fullyDownloaded,
             isPartiallyDownloaded = partiallyDownloaded,
-            defaultPrompt = "RAW photo, best quality, realistic, photo-realistic, masterpiece, extremely detailed, CG, unity, 8k wallpaper, ultra-detailed, highres, absurdres, 1girl, silver hair,",
+            defaultPrompt = "RAW photo, best quality, realistic, photo-realistic, masterpiece, 1girl, upper body, facing front, portrait,",
             defaultNegativePrompt = "paintings, sketches, worst quality, low quality, normal quality, lowres, monochrome, grayscale, skin spots, acnes, skin blemishes, age spot, bad anatomy, bad hands, bad body, bad proportions, gross proportions, extra fingers, fewer fingers, extra digit, missing fingers, fused fingers, extra arms, missing arms, extra legs, missing legs, extra limbs, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, blurry, watermark, white letters, signature, text, error, jpeg artifacts, duplicate, morbid, mutilated, cross-eyed, long neck, ng_deepnegative_v1_75t, easynegative, bad-picture-chill-75v, bad-artist",
             runOnCpu = true
         )
