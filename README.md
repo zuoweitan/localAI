@@ -102,15 +102,15 @@ open this project in android studio and click Build/Generate App Bundles or APKs
 
 ## Available Models
 
-| Model                | Type  | CPU | NPU | Source                                                                   |
-| -------------------- | ----- | --- | --- | ------------------------------------------------------------------------ |
-| Anything V5.0        | SD1.5 | ✅  | ✅  | https://civitai.com/models/9409?modelVersionId=30163                     |
-| ChilloutMix          | SD1.5 | ✅  | ✅  | https://civitai.com/models/6424/chilloutmix?modelVersionId=11732         |
-| Absolute Reality     | SD1.5 | ✅  | ✅  | https://civitai.com/models/81458?modelVersionId=132760                   |
-| QteaMix              | SD1.5 | ✅  | ✅  | https://civitai.com/models/50696/qteamix-q?modelVersionId=94654          |
-| CuteYukiMix          | SD1.5 | ✅  | ✅  | https://civitai.com/models/28169?modelVersionId=265102                   |
-| Stable Diffusion 2.1 | SD2.1 | -   | ✅  | https://huggingface.co/stabilityai/stable-diffusion-2-1/tree/main        |
-| Pony V5.5            | SD2.1 | -   | ✅  | https://civitai.com/models/95367/pony-diffusion-v5?modelVersionId=205936 |
+| Model                | Type  | CPU | NPU | Clip Skip | Source                                                                           |
+| -------------------- | ----- | --- | --- | --------- | -------------------------------------------------------------------------------- |
+| Anything V5.0        | SD1.5 | ✅  | ✅  | 2         | [Link](https://civitai.com/models/9409?modelVersionId=30163)                     |
+| ChilloutMix          | SD1.5 | ✅  | ✅  | 1         | [Link](https://civitai.com/models/6424/chilloutmix?modelVersionId=11732)         |
+| Absolute Reality     | SD1.5 | ✅  | ✅  | 2         | [Link](https://civitai.com/models/81458?modelVersionId=132760)                   |
+| QteaMix              | SD1.5 | ✅  | ✅  | 2         | [Link](https://civitai.com/models/50696/qteamix-q?modelVersionId=94654)          |
+| CuteYukiMix          | SD1.5 | ✅  | ✅  | 2         | [Link](https://civitai.com/models/28169?modelVersionId=265102)                   |
+| Stable Diffusion 2.1 | SD2.1 | -   | ✅  | 1         | [Link](https://huggingface.co/stabilityai/stable-diffusion-2-1/tree/main)        |
+| Pony V5.5            | SD2.1 | -   | ✅  | 1         | [Link](https://civitai.com/models/95367/pony-diffusion-v5?modelVersionId=205936) |
 
 ## Seed Settings
 
