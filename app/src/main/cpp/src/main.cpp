@@ -1,4 +1,5 @@
 #include <chrono>
+#include <filesystem>
 #include <functional>
 #include <iostream>
 #include <memory>
@@ -44,6 +45,8 @@
 #include <xtensor/xrandom.hpp>
 #include <xtensor/xview.hpp>
 
+#include "zstd.h"
+
 int port = 8081;
 std::string listen_address = "127.0.0.1";
 bool ponyv55 = false;
@@ -52,7 +55,8 @@ bool use_safety_checker = false;
 bool use_mnn_clip = false;
 float nsfw_threshold = 0.5f;
 std::string clipPath, unetPath, vaeDecoderPath, vaeEncoderPath,
-    safetyCheckerPath, tokenizerPath;
+    safetyCheckerPath, tokenizerPath, patchPath;
+int resolution = 512;
 std::shared_ptr<tokenizers::Tokenizer> tokenizer;
 std::unique_ptr<QnnModel> clipApp = nullptr;
 std::unique_ptr<QnnModel> unetApp = nullptr;
@@ -86,6 +90,162 @@ bool request_has_mask;
 namespace qnn {
 namespace tools {
 namespace sample_app {
+
+std::vector<char> readFileForPatch(const std::string &filePath) {
+  std::ifstream file(filePath, std::ios::binary | std::ios::ate);
+  if (!file.is_open()) {
+    throw std::runtime_error("Failed to open file: " + filePath);
+  }
+  std::streamsize size = file.tellg();
+  file.seekg(0, std::ios::beg);
+  std::vector<char> buffer(size);
+  if (size > 0) {
+    if (!file.read(buffer.data(), size)) {
+      throw std::runtime_error("Failed to read file: " + filePath);
+    }
+  }
+  return buffer;
+}
+
+void writeFileForPatch(const std::string &filePath,
+                       const std::vector<char> &data) {
+  std::ofstream file(filePath, std::ios::binary);
+  if (!file.is_open()) {
+    throw std::runtime_error("Failed to open file for writing: " + filePath);
+  }
+  if (!data.empty()) {
+    if (!file.write(data.data(), data.size())) {
+      throw std::runtime_error("Failed to write file: " + filePath);
+    }
+  }
+}
+
+int applyZstdPatch(const std::string &oldFilePath,
+                   const std::string &patchFilePath,
+                   const std::string &newFilePath) {
+  try {
+    std::vector<char> oldFileBuffer = readFileForPatch(oldFilePath);
+    QNN_INFO("Read old file (%s): %zu bytes.", oldFilePath.c_str(),
+             oldFileBuffer.size());
+
+    std::vector<char> patchFileBuffer = readFileForPatch(patchFilePath);
+    QNN_INFO("Read patch file (%s): %zu bytes.", patchFilePath.c_str(),
+             patchFileBuffer.size());
+
+    if (patchFileBuffer.empty()) {
+      throw std::runtime_error("Patch file (" + patchFilePath +
+                               ") is empty or could not be read.");
+    }
+
+    unsigned long long const decompressedSize = ZSTD_getFrameContentSize(
+        patchFileBuffer.data(), patchFileBuffer.size());
+
+    if (decompressedSize == ZSTD_CONTENTSIZE_ERROR) {
+      throw std::runtime_error("Patch file (" + patchFilePath +
+                               ") is not a valid zstd frame.");
+    }
+    if (decompressedSize == ZSTD_CONTENTSIZE_UNKNOWN) {
+      throw std::runtime_error(
+          "Decompressed size is unknown. Cannot proceed with this simple "
+          "implementation.");
+    }
+
+    std::vector<char> newFileBuffer;
+    if (decompressedSize > 0) {
+      newFileBuffer.resize(decompressedSize);
+    } else {
+      writeFileForPatch(newFilePath, newFileBuffer);
+      QNN_INFO(
+          "Successfully applied patch (resulting in an empty file). New file "
+          "saved to: %s",
+          newFilePath.c_str());
+      return 0;
+    }
+
+    ZSTD_DCtx *const dctx = ZSTD_createDCtx();
+    if (dctx == nullptr) {
+      throw std::runtime_error("ZSTD_createDCtx() failed!");
+    }
+
+    size_t const actualDecompressedSize = ZSTD_decompress_usingDict(
+        dctx, newFileBuffer.data(), newFileBuffer.size(),
+        patchFileBuffer.data(), patchFileBuffer.size(), oldFileBuffer.data(),
+        oldFileBuffer.size());
+
+    ZSTD_freeDCtx(dctx);
+
+    if (ZSTD_isError(actualDecompressedSize)) {
+      throw std::runtime_error(
+          "ZSTD_decompress_usingDict() failed: " +
+          std::string(ZSTD_getErrorName(actualDecompressedSize)));
+    }
+
+    if (actualDecompressedSize != decompressedSize) {
+      if (actualDecompressedSize < newFileBuffer.size()) {
+        newFileBuffer.resize(actualDecompressedSize);
+      }
+    }
+
+    QNN_INFO("Decompressed %zu bytes into new file buffer.",
+             actualDecompressedSize);
+
+    writeFileForPatch(newFilePath, newFileBuffer);
+    QNN_INFO("Successfully applied patch. New file saved to: %s",
+             newFilePath.c_str());
+
+  } catch (const std::exception &e) {
+    QNN_ERROR("Error applying patch: %s", e.what());
+    return 1;
+  }
+  return 0;
+}
+
+std::string processPatchLogic(const std::string &originalUnetPath,
+                              const std::string &patchPath, int resolution) {
+  if (patchPath.empty()) {
+    return originalUnetPath;
+  }
+
+  try {
+    std::filesystem::path patchFile(patchPath);
+    std::filesystem::path patchDir = patchFile.parent_path();
+
+    std::string targetFileName = "unet.bin." + std::to_string(resolution);
+    std::filesystem::path targetPath = patchDir / targetFileName;
+
+    if (std::filesystem::exists(targetPath)) {
+      QNN_INFO("Target file %s already exists, using it directly.",
+               targetPath.string().c_str());
+      return targetPath.string();
+    }
+
+    QNN_INFO("Target file %s does not exist, applying patch...",
+             targetPath.string().c_str());
+
+    std::filesystem::path tempPath = patchDir / "unet.bin.tmp";
+
+    int result = applyZstdPatch(originalUnetPath, patchPath, tempPath.string());
+    if (result != 0) {
+      QNN_ERROR("Failed to apply patch");
+      return originalUnetPath;
+    }
+
+    try {
+      std::filesystem::rename(tempPath, targetPath);
+      QNN_INFO("Successfully renamed %s to %s", tempPath.string().c_str(),
+               targetPath.string().c_str());
+    } catch (const std::filesystem::filesystem_error &e) {
+      QNN_ERROR("Failed to rename file: %s", e.what());
+      return originalUnetPath;
+    }
+
+    return targetPath.string();
+
+  } catch (const std::exception &e) {
+    QNN_ERROR("Error in patch processing: %s", e.what());
+    return originalUnetPath;
+  }
+}
 
 // QnnModel Initialization
 template <typename AppType>
@@ -142,7 +302,8 @@ void processCommandLine(int argc, char **argv) {
     OPT_VERSION = 13,
     OPT_SYSTEM_LIBRARY = 14,
     OPT_PORT = 15,
-    OPT_TOKENIZER = 16
+    OPT_TOKENIZER = 16,
+    OPT_PATCH = 17
   };
   static struct pal::Option s_longOptions[] = {
       {"help", pal::no_argument, NULL, OPT_HELP},
@@ -162,6 +323,7 @@ void processCommandLine(int argc, char **argv) {
       {"log_level", pal::required_argument, NULL, OPT_LOG_LEVEL},
       {"system_library", pal::required_argument, NULL, OPT_SYSTEM_LIBRARY},
       {"version", pal::no_argument, NULL, OPT_VERSION},
+      {"patch", pal::required_argument, NULL, OPT_PATCH},
       {NULL, 0, NULL, 0}};
   std::string backendPathCmd, systemLibraryPathCmd;
   QnnLog_Level_t logLevel = QNN_LOG_LEVEL_ERROR;
@@ -223,6 +385,17 @@ void processCommandLine(int argc, char **argv) {
         break;
       case OPT_TOKENIZER:
         tokenizerPath = pal::g_optArg;
+        break;
+      case OPT_PATCH:
+        patchPath = pal::g_optArg;
+        if (patchPath.find("1024.patch") != std::string::npos) {
+          resolution = 1024;
+        } else if (patchPath.find("768.patch") != std::string::npos) {
+          resolution = 768;
+        } else {
+          QNN_WARN("Unknown patch type, using default resolution: %d",
+                   resolution);
+        }
         break;
       default:
         showHelpAndExit("Invalid argument passed.");
@@ -290,6 +463,13 @@ void processCommandLine(int argc, char **argv) {
         saveBinaryName);
   };
 
+  std::string finalUnetPath =
+      processPatchLogic(unetPath, patchPath, resolution);
+  if (finalUnetPath != unetPath) {
+    QNN_INFO("Using patched unet path: %s", finalUnetPath.c_str());
+    unetPath = finalUnetPath;
+  }
+
   if (!use_mnn_clip) {
     clipApp = createQnnModel(clipPath, "clip");
     if (!clipApp) showHelpAndExit("Failed create QNN CLIP model.");
@@ -335,6 +515,123 @@ std::vector<int> processPrompt(const std::string &prompt_in,
   ids.insert(ids.end(), n_ids.begin(), n_ids.end());
   ids.insert(ids.end(), p_ids.begin(), p_ids.end());
   return ids;
+}
+xt::xarray<float> blend_vae_encoder_tiles(
+    const std::vector<std::pair<xt::xarray<float>, xt::xarray<float>>>
+        &tiles_mean_std,
+    const std::vector<std::pair<int, int>> &positions, int latent_h,
+    int latent_w, int tile_size, int overlap) {
+  if (tiles_mean_std.empty()) {
+    throw std::runtime_error(
+        "Tile list cannot be empty for VAE encoder blending.");
+  }
+
+  std::vector<int> accumulated_shape = {1, 4, latent_h, latent_w};
+  xt::xarray<float> accumulated_mean = xt::zeros<float>(accumulated_shape);
+  xt::xarray<float> accumulated_std = xt::zeros<float>(accumulated_shape);
+  xt::xarray<float> weight_map = xt::zeros<float>({latent_h, latent_w});
+
+  int fade_size = overlap / 2;
+  xt::xarray<float> tile_weight = xt::ones<float>({tile_size, tile_size});
+
+  if (fade_size > 0) {
+    for (int i = 0; i < fade_size; ++i) {
+      float alpha = (float)(i + 1) / fade_size;
+      xt::view(tile_weight, i, xt::all()) *= alpha;
+      xt::view(tile_weight, tile_size - 1 - i, xt::all()) *= alpha;
+      xt::view(tile_weight, xt::all(), i) *= alpha;
+      xt::view(tile_weight, xt::all(), tile_size - 1 - i) *= alpha;
+    }
+  }
+
+  for (size_t idx = 0; idx < tiles_mean_std.size(); ++idx) {
+    int x = positions[idx].first;
+    int y = positions[idx].second;
+
+    const auto &mean_tile =
+        tiles_mean_std[idx].first;  // (1, 4, tile_size, tile_size)
+    const auto &std_tile =
+        tiles_mean_std[idx].second;  // (1, 4, tile_size, tile_size)
+
+    for (int c = 0; c < 4; ++c) {
+      auto acc_mean_slice =
+          xt::view(accumulated_mean, 0, c, xt::range(y, y + tile_size),
+                   xt::range(x, x + tile_size));
+      auto mean_slice = xt::view(mean_tile, 0, c, xt::all(), xt::all());
+      acc_mean_slice += mean_slice * tile_weight;
+
+      auto acc_std_slice =
+          xt::view(accumulated_std, 0, c, xt::range(y, y + tile_size),
+                   xt::range(x, x + tile_size));
+      auto std_slice = xt::view(std_tile, 0, c, xt::all(), xt::all());
+      acc_std_slice += std_slice * tile_weight;
+    }
+
+    auto weight_slice = xt::view(weight_map, xt::range(y, y + tile_size),
+                                 xt::range(x, x + tile_size));
+    weight_slice += tile_weight;
+  }
+
+  weight_map = xt::maximum(weight_map, 1e-8f);
+  xt::xarray<float> weight_expanded =
+      xt::reshape_view(weight_map, {1, 1, latent_h, latent_w});
+
+  xt::xarray<float> final_mean = accumulated_mean / weight_expanded;
+  xt::xarray<float> final_std = accumulated_std / weight_expanded;
+
+  xt::xarray<float> noise =
+      xt::random::randn<float>({1, 4, latent_h, latent_w});
+  xt::xarray<float> latent = xt::eval(final_mean + final_std * noise);
+
+  return latent;
+}
+xt::xarray<float> blend_vae_output_tiles(
+    const std::vector<xt::xarray<float>> &tiles,
+    const std::vector<std::pair<int, int>> &positions, int output_h,
+    int output_w, int tile_size, int overlap) {
+  if (tiles.empty()) {
+    throw std::runtime_error(
+        "Tile list cannot be empty for VAE output blending.");
+  }
+
+  std::vector<int> accumulated_shape = {1, 3, output_h, output_w};
+  xt::xarray<float> accumulated = xt::zeros<float>(accumulated_shape);
+  xt::xarray<float> weight_map = xt::zeros<float>({output_h, output_w});
+
+  int fade_size = overlap / 2;
+  xt::xarray<float> tile_weight = xt::ones<float>({tile_size, tile_size});
+
+  if (fade_size > 0) {
+    for (int i = 0; i < fade_size; ++i) {
+      float alpha = (float)(i + 1) / fade_size;
+      xt::view(tile_weight, i, xt::all()) *= alpha;
+      xt::view(tile_weight, tile_size - 1 - i, xt::all()) *= alpha;
+      xt::view(tile_weight, xt::all(), i) *= alpha;
+      xt::view(tile_weight, xt::all(), tile_size - 1 - i) *= alpha;
+    }
+  }
+
+  for (size_t idx = 0; idx < tiles.size(); ++idx) {
+    int x = positions[idx].first;
+    int y = positions[idx].second;
+
+    for (int c = 0; c < 3; ++c) {
+      auto acc_slice = xt::view(accumulated, 0, c, xt::range(y, y + tile_size),
+                                xt::range(x, x + tile_size));
+      auto tile_slice = xt::view(tiles[idx], 0, c, xt::all(), xt::all());
+      acc_slice += tile_slice * tile_weight;
+    }
+
+    auto weight_slice = xt::view(weight_map, xt::range(y, y + tile_size),
+                                 xt::range(x, x + tile_size));
+    weight_slice += tile_weight;
+  }
+
+  weight_map = xt::maximum(weight_map, 1e-8f);
+  xt::xarray<float> weight_expanded =
+      xt::reshape_view(weight_map, {1, 1, output_h, output_w});
+
+  return accumulated / weight_expanded;
 }
 
 // --- Image Generation ---
@@ -475,64 +772,169 @@ GenerationResult generateImage(
       auto vae_enc_start = std::chrono::high_resolution_clock::now();
       std::vector<int> img_shape = {1, 3, output_size, output_size};
       original_image = xt::adapt(img_data, img_shape);
-      std::vector<float> vae_enc_mean(1 * 4 * sample_size * sample_size);
-      std::vector<float> vae_enc_std(1 * 4 * sample_size * sample_size);
 
-      if (use_mnn) {
-        MNN::Interpreter *currentVaeEncoderInterpreter =
-            MNN::Interpreter::createFromFile(vaeEncoderPath.c_str());
+      bool need_vae_enc_tiling =
+          (output_size >= 768 && !use_mnn && vaeEncoderApp);
 
-        if (!currentVaeEncoderInterpreter)
-          throw std::runtime_error(
-              "Failed to create temporary MNN VAE Encoder interpreter!");
+      xt::xarray<float> img_lat_scaled;
 
-        MNN::ScheduleConfig cfg_vae;
-        cfg_vae.type = MNN_FORWARD_CPU;
-        cfg_vae.numThread = 4;
-        MNN::BackendConfig bkCfg_vae;
-        bkCfg_vae.memory = MNN::BackendConfig::Memory_Low;
-        bkCfg_vae.power = MNN::BackendConfig::Power_High;
-        cfg_vae.backendConfig = &bkCfg_vae;
+      if (!need_vae_enc_tiling) {
+        std::vector<float> vae_enc_mean(1 * 4 * sample_size * sample_size);
+        std::vector<float> vae_enc_std(1 * 4 * sample_size * sample_size);
 
-        MNN::Session *currentVaeEncSession =
-            currentVaeEncoderInterpreter->createSession(cfg_vae);
+        if (use_mnn) {
+          MNN::Interpreter *currentVaeEncoderInterpreter =
+              MNN::Interpreter::createFromFile(vaeEncoderPath.c_str());
+          if (!currentVaeEncoderInterpreter)
+            throw std::runtime_error("Failed MNN VAE Enc create");
 
-        if (!currentVaeEncSession)
-          throw std::runtime_error("Failed create temp MNN VAE Enc session!");
+          MNN::ScheduleConfig cfg_vae_enc;
+          cfg_vae_enc.type = MNN_FORWARD_CPU;
+          cfg_vae_enc.numThread = 4;
+          MNN::BackendConfig bkCfg_vae_enc;
+          bkCfg_vae_enc.memory = MNN::BackendConfig::Memory_Low;
+          bkCfg_vae_enc.power = MNN::BackendConfig::Power_High;
+          cfg_vae_enc.backendConfig = &bkCfg_vae_enc;
 
-        auto input = currentVaeEncoderInterpreter->getSessionInput(
-            currentVaeEncSession, "input");
+          MNN::Session *currentVaeEncSession =
+              currentVaeEncoderInterpreter->createSession(cfg_vae_enc);
+          if (!currentVaeEncSession)
+            throw std::runtime_error("Failed create temp MNN VAE Enc session!");
 
-        currentVaeEncoderInterpreter->resizeTensor(
-            input, {1, 3, output_size, output_size});
-        currentVaeEncoderInterpreter->resizeSession(currentVaeEncSession);
+          auto input = currentVaeEncoderInterpreter->getSessionInput(
+              currentVaeEncSession, "input");
+          currentVaeEncoderInterpreter->resizeTensor(
+              input, {1, 3, output_size, output_size});
+          currentVaeEncoderInterpreter->resizeSession(currentVaeEncSession);
+          currentVaeEncoderInterpreter->releaseModel();
 
-        currentVaeEncoderInterpreter->releaseModel();
+          memcpy(input->host<float>(), img_data.data(),
+                 img_data.size() * sizeof(float));
+          currentVaeEncoderInterpreter->runSession(currentVaeEncSession);
 
-        memcpy(input->host<float>(), img_data.data(),
-               img_data.size() * sizeof(float));
+          auto mean_t = currentVaeEncoderInterpreter->getSessionOutput(
+              currentVaeEncSession, "mean");
+          auto std_t = currentVaeEncoderInterpreter->getSessionOutput(
+              currentVaeEncSession, "std");
+          memcpy(vae_enc_mean.data(), mean_t->host<float>(),
+                 vae_enc_mean.size() * sizeof(float));
+          memcpy(vae_enc_std.data(), std_t->host<float>(),
+                 vae_enc_std.size() * sizeof(float));
 
-        currentVaeEncoderInterpreter->runSession(currentVaeEncSession);
+          currentVaeEncoderInterpreter->releaseSession(currentVaeEncSession);
+          delete currentVaeEncoderInterpreter;
+        } else {
+          if (!vaeEncoderApp)
+            throw std::runtime_error("Global vaeEncoderApp not init!");
+          if (StatusCode::SUCCESS !=
+              vaeEncoderApp->executeVaeEncoderGraphs(
+                  img_data.data(), vae_enc_mean.data(), vae_enc_std.data()))
+            throw std::runtime_error("QNN VAE enc exec failed");
+        }
 
-        auto mean_t = currentVaeEncoderInterpreter->getSessionOutput(
-            currentVaeEncSession, "mean");
-        auto std_t = currentVaeEncoderInterpreter->getSessionOutput(
-            currentVaeEncSession, "std");
+        auto mean = xt::adapt(vae_enc_mean, shape);
+        auto std_dev = xt::adapt(vae_enc_std, shape);
+        xt::xarray<float> noise_0 = xt::random::randn<float>(shape);
+        xt::xarray<float> img_lat = xt::eval(mean + std_dev * noise_0);
+        img_lat_scaled = xt::eval(0.18215 * img_lat);
 
-        memcpy(vae_enc_mean.data(), mean_t->host<float>(),
-               vae_enc_mean.size() * sizeof(float));
-        memcpy(vae_enc_std.data(), std_t->host<float>(),
-               vae_enc_std.size() * sizeof(float));
-
-        currentVaeEncoderInterpreter->releaseSession(currentVaeEncSession);
-        delete currentVaeEncoderInterpreter;
       } else {
-        if (!vaeEncoderApp)
-          throw std::runtime_error("Global vaeEncoderApp not init!");
-        if (StatusCode::SUCCESS !=
-            vaeEncoderApp->executeVaeEncoderGraphs(
-                img_data.data(), vae_enc_mean.data(), vae_enc_std.data()))
-          throw std::runtime_error("QNN VAE enc exec failed");
+        std::cout << "Using VAE encoder tiling for " << output_size << "x"
+                  << output_size << " input..." << std::endl;
+
+        const int vae_enc_tile_size = 512;
+        const int vae_enc_latent_tile_size = 64;
+
+        std::vector<std::pair<int, int>> img_positions;
+        std::vector<std::pair<int, int>> latent_positions;
+        int latent_overlap;
+        int num_tiles_per_side;
+
+        if (output_size == 768) {
+          num_tiles_per_side = 2;
+          latent_overlap = 32;
+        } else if (output_size == 1024) {
+          num_tiles_per_side = 3;
+          latent_overlap = 32;
+        } else {
+          throw std::runtime_error("Unsupported size for VAE encoder tiling");
+        }
+
+        int img_stride =
+            (output_size - vae_enc_tile_size) / (num_tiles_per_side - 1);
+        int latent_stride =
+            (sample_size - vae_enc_latent_tile_size) / (num_tiles_per_side - 1);
+
+        for (int row = 0; row < num_tiles_per_side; ++row) {
+          for (int col = 0; col < num_tiles_per_side; ++col) {
+            int x = col * img_stride;
+            int y = row * img_stride;
+            int lat_x = col * latent_stride;
+            int lat_y = row * latent_stride;
+
+            x = std::min(x, output_size - vae_enc_tile_size);
+            y = std::min(y, output_size - vae_enc_tile_size);
+            lat_x = std::min(lat_x, sample_size - vae_enc_latent_tile_size);
+            lat_y = std::min(lat_y, sample_size - vae_enc_latent_tile_size);
+
+            img_positions.push_back({x, y});
+            latent_positions.push_back({lat_x, lat_y});
+          }
+        }
+
+        int original_output_size = output_size;
+        int original_sample_size = sample_size;
+
+        output_size = vae_enc_tile_size;
+        sample_size = vae_enc_latent_tile_size;
+
+        std::vector<std::pair<xt::xarray<float>, xt::xarray<float>>>
+            encoded_tiles_mean_std;
+        encoded_tiles_mean_std.reserve(img_positions.size());
+
+        for (size_t i = 0; i < img_positions.size(); ++i) {
+          auto img_pos = img_positions[i];
+          xt::xarray<float> img_tile = xt::view(
+              original_image, 0, xt::all(),
+              xt::range(img_pos.second, img_pos.second + vae_enc_tile_size),
+              xt::range(img_pos.first, img_pos.first + vae_enc_tile_size));
+
+          std::vector<float> tile_img_vec(img_tile.begin(), img_tile.end());
+          std::vector<float> tile_mean_vec(1 * 4 * vae_enc_latent_tile_size *
+                                           vae_enc_latent_tile_size);
+          std::vector<float> tile_std_vec(1 * 4 * vae_enc_latent_tile_size *
+                                          vae_enc_latent_tile_size);
+
+          if (!vaeEncoderApp)
+            throw std::runtime_error("Global vaeEncoderApp not init!");
+
+          if (StatusCode::SUCCESS !=
+              vaeEncoderApp->executeVaeEncoderGraphs(tile_img_vec.data(),
+                                                     tile_mean_vec.data(),
+                                                     tile_std_vec.data()))
+            throw std::runtime_error("QNN VAE enc exec failed for tile");
+
+          std::vector<int> tile_shape = {1, 4, vae_enc_latent_tile_size,
+                                         vae_enc_latent_tile_size};
+          encoded_tiles_mean_std.push_back(
+              {xt::adapt(tile_mean_vec, tile_shape),
+               xt::adapt(tile_std_vec, tile_shape)});
+          std::cout << "Processed VAE encoder tile " << i + 1 << "/"
+                    << img_positions.size() << std::endl;
+        }
+
+        output_size = original_output_size;
+        sample_size = original_sample_size;
+
+        xt::xarray<float> img_lat = blend_vae_encoder_tiles(
+            encoded_tiles_mean_std, latent_positions, sample_size, sample_size,
+            vae_enc_latent_tile_size, latent_overlap);
+
+        img_lat_scaled = xt::eval(0.18215 * img_lat);
+
+        std::cout << "VAE encoder tiling completed: "
+                  << encoded_tiles_mean_std.size()
+                  << " tiles processed and blended" << std::endl;
       }
 
       auto vae_enc_end = std::chrono::high_resolution_clock::now();
@@ -542,28 +944,21 @@ GenerationResult generateImage(
                        .count()
                 << "ms\n";
 
-      auto mean = xt::adapt(vae_enc_mean, shape);
-      auto std_dev = xt::adapt(vae_enc_std, shape);
-      xt::xarray<float> noise_0 = xt::random::randn<float>(shape);
-      xt::xarray<float> img_lat = xt::eval(mean + std_dev * noise_0);
-      xt::xarray<float> img_lat_scaled = xt::eval(0.18215 * img_lat);
+      original_latents = img_lat_scaled;
       start_step = steps * (1.0f - denoise_strength);
       total_run_steps -= start_step;
       scheduler.set_begin_index(start_step);
       xt::xarray<int> t = {(int)(timesteps(start_step))};
-      latents = scheduler.add_noise(img_lat_scaled, latents_noise, t);
+      latents = scheduler.add_noise(original_latents, latents_noise, t);
 
       if (request_has_mask) {
-        original_latents = img_lat_scaled;
         mask = xt::adapt(mask_data, {1, 4, sample_size, sample_size});
         mask_full = xt::adapt(mask_data_full, {1, 3, output_size, output_size});
       }
 
       current_step++;
       progress_callback(current_step, total_run_steps);
-    }
-
-    // --- UNET Denoising Loop ---
+    }  // --- UNET Denoising Loop ---
     int single_latent_size = 1 * 4 * sample_size * sample_size;
 
     MNN::Interpreter *currentUnetInterpreter = nullptr;
@@ -709,62 +1104,188 @@ GenerationResult generateImage(
 
     // --- VAE Decode ---
     auto vae_dec_start = std::chrono::high_resolution_clock::now();
+
+    bool need_vae_tiling =
+        ((output_size == 768 || output_size == 1024) && !use_mnn);
+    if (need_vae_tiling) {
+      std::cout << "Using VAE tiling for " << output_size << "x" << output_size
+                << " output..." << std::endl;
+    }
+
     latents = xt::eval((1.0 / 0.18215) * latents);
-    std::vector<float> vae_dec_in_vec(latents.begin(), latents.end());
-    std::vector<float> vae_dec_out_pixels(1 * 3 * output_size * output_size);
 
-    if (use_mnn) {
-      MNN::Interpreter *currentVaeDecoderInterpreter =
-          MNN::Interpreter::createFromFile(vaeDecoderPath.c_str());
+    xt::xarray<float> pixels;
 
-      if (!currentVaeDecoderInterpreter)
-        throw std::runtime_error(
-            "Failed to create temporary MNN VAE Decoder interpreter!");
+    if (!need_vae_tiling) {
+      std::vector<float> vae_dec_in_vec(latents.begin(), latents.end());
+      std::vector<float> vae_dec_out_pixels(1 * 3 * output_size * output_size);
 
-      MNN::ScheduleConfig cfg_vae;
-      cfg_vae.type = MNN_FORWARD_CPU;
-      cfg_vae.numThread = 4;
-      MNN::BackendConfig bkCfg_vae;
-      bkCfg_vae.memory = MNN::BackendConfig::Memory_Low;
-      bkCfg_vae.power = MNN::BackendConfig::Power_High;
-      cfg_vae.backendConfig = &bkCfg_vae;
+      if (use_mnn) {
+        MNN::Interpreter *currentVaeDecoderInterpreter =
+            MNN::Interpreter::createFromFile(vaeDecoderPath.c_str());
 
-      MNN::Session *currentVaeDecSession =
-          currentVaeDecoderInterpreter->createSession(cfg_vae);
+        if (!currentVaeDecoderInterpreter)
+          throw std::runtime_error(
+              "Failed to create temporary MNN VAE Decoder interpreter!");
 
-      if (!currentVaeDecSession)
-        throw std::runtime_error("Failed create temp MNN VAE Dec session!");
+        MNN::ScheduleConfig cfg_vae;
+        cfg_vae.type = MNN_FORWARD_CPU;
+        cfg_vae.numThread = 4;
+        MNN::BackendConfig bkCfg_vae;
+        bkCfg_vae.memory = MNN::BackendConfig::Memory_Low;
+        bkCfg_vae.power = MNN::BackendConfig::Power_High;
+        cfg_vae.backendConfig = &bkCfg_vae;
 
-      auto input = currentVaeDecoderInterpreter->getSessionInput(
-          currentVaeDecSession, "latent_sample");
+        MNN::Session *currentVaeDecSession =
+            currentVaeDecoderInterpreter->createSession(cfg_vae);
 
-      currentVaeDecoderInterpreter->resizeTensor(
-          input, {1, 4, sample_size, sample_size});
-      currentVaeDecoderInterpreter->resizeSession(currentVaeDecSession);
+        if (!currentVaeDecSession)
+          throw std::runtime_error("Failed create temp MNN VAE Dec session!");
 
-      currentVaeDecoderInterpreter->releaseModel();
+        auto input = currentVaeDecoderInterpreter->getSessionInput(
+            currentVaeDecSession, "latent_sample");
 
-      memcpy(input->host<float>(), vae_dec_in_vec.data(),
-             vae_dec_in_vec.size() * sizeof(float));
+        currentVaeDecoderInterpreter->resizeTensor(
+            input, {1, 4, sample_size, sample_size});
+        currentVaeDecoderInterpreter->resizeSession(currentVaeDecSession);
 
-      currentVaeDecoderInterpreter->runSession(currentVaeDecSession);
+        currentVaeDecoderInterpreter->releaseModel();
 
-      auto output = currentVaeDecoderInterpreter->getSessionOutput(
-          currentVaeDecSession, "sample");
+        memcpy(input->host<float>(), vae_dec_in_vec.data(),
+               vae_dec_in_vec.size() * sizeof(float));
 
-      memcpy(vae_dec_out_pixels.data(), output->host<float>(),
-             vae_dec_out_pixels.size() * sizeof(float));
+        currentVaeDecoderInterpreter->runSession(currentVaeDecSession);
 
-      currentVaeDecoderInterpreter->releaseSession(currentVaeDecSession);
-      delete currentVaeDecoderInterpreter;
+        auto output = currentVaeDecoderInterpreter->getSessionOutput(
+            currentVaeDecSession, "sample");
+
+        memcpy(vae_dec_out_pixels.data(), output->host<float>(),
+               vae_dec_out_pixels.size() * sizeof(float));
+
+        currentVaeDecoderInterpreter->releaseSession(currentVaeDecSession);
+        delete currentVaeDecoderInterpreter;
+      } else {
+        if (!vaeDecoderApp)
+          throw std::runtime_error("Global vaeDecoderApp not init!");
+
+        if (StatusCode::SUCCESS !=
+            vaeDecoderApp->executeVaeDecoderGraphs(vae_dec_in_vec.data(),
+                                                   vae_dec_out_pixels.data()))
+          throw std::runtime_error("QNN VAE dec exec failed");
+      }
+
+      std::vector<int> pixel_shape = {1, 3, output_size, output_size};
+      pixels = xt::adapt(vae_dec_out_pixels, pixel_shape);
+
     } else {
-      if (!vaeDecoderApp)
-        throw std::runtime_error("Global vaeDecoderApp not init!");
+      const int vae_tile_size = 512;
+      const int vae_latent_tile_size = 64;
 
-      if (StatusCode::SUCCESS !=
-          vaeDecoderApp->executeVaeDecoderGraphs(vae_dec_in_vec.data(),
-                                                 vae_dec_out_pixels.data()))
-        throw std::runtime_error("QNN VAE dec exec failed");
+      std::vector<std::pair<int, int>> latent_positions;
+      std::vector<std::pair<int, int>> output_positions;
+      int overlap, latent_overlap;
+
+      if (output_size == 768) {
+        overlap = 256;
+        latent_overlap = 32;
+        int output_stride = vae_tile_size - overlap;
+        int latent_stride = vae_latent_tile_size - latent_overlap;
+
+        for (int row = 0; row < 2; ++row) {
+          for (int col = 0; col < 2; ++col) {
+            int x = col * output_stride;
+            int y = row * output_stride;
+            int lat_x = col * latent_stride;
+            int lat_y = row * latent_stride;
+
+            if (col == 1) {
+              x = output_size - vae_tile_size;
+              lat_x = sample_size - vae_latent_tile_size;
+            }
+            if (row == 1) {
+              y = output_size - vae_tile_size;
+              lat_y = sample_size - vae_latent_tile_size;
+            }
+
+            latent_positions.push_back({lat_x, lat_y});
+            output_positions.push_back({x, y});
+          }
+        }
+      } else if (output_size == 1024) {
+        overlap = 256;
+        latent_overlap = 32;
+        int output_stride = (output_size - vae_tile_size) / 2;
+        int latent_stride = (sample_size - vae_latent_tile_size) / 2;
+
+        for (int row = 0; row < 3; ++row) {
+          for (int col = 0; col < 3; ++col) {
+            int x = col * output_stride;
+            int y = row * output_stride;
+            int lat_x = col * latent_stride;
+            int lat_y = row * latent_stride;
+
+            if (col == 2) {
+              x = output_size - vae_tile_size;
+              lat_x = sample_size - vae_latent_tile_size;
+            }
+            if (row == 2) {
+              y = output_size - vae_tile_size;
+              lat_y = sample_size - vae_latent_tile_size;
+            }
+
+            latent_positions.push_back({lat_x, lat_y});
+            output_positions.push_back({x, y});
+          }
+        }
+      } else {
+        throw std::runtime_error("Unsupported size for VAE decoder tiling");
+      }
+
+      int original_output_size = output_size;
+      int original_sample_size = sample_size;
+
+      output_size = vae_tile_size;
+      sample_size = vae_latent_tile_size;
+
+      std::vector<xt::xarray<float>> decoded_tiles;
+      decoded_tiles.reserve(latent_positions.size());
+
+      for (size_t i = 0; i < latent_positions.size(); ++i) {
+        auto lat_pos = latent_positions[i];
+        xt::xarray<float> latent_tile = xt::view(
+            latents, 0, xt::all(),
+            xt::range(lat_pos.second, lat_pos.second + vae_latent_tile_size),
+            xt::range(lat_pos.first, lat_pos.first + vae_latent_tile_size));
+
+        std::vector<float> tile_latent_vec(latent_tile.begin(),
+                                           latent_tile.end());
+        std::vector<float> tile_output_vec(1 * 3 * vae_tile_size *
+                                           vae_tile_size);
+
+        if (!vaeDecoderApp)
+          throw std::runtime_error("Global vaeDecoderApp not init!");
+
+        if (StatusCode::SUCCESS !=
+            vaeDecoderApp->executeVaeDecoderGraphs(tile_latent_vec.data(),
+                                                   tile_output_vec.data()))
+          throw std::runtime_error("QNN VAE dec exec failed for tile");
+
+        std::vector<int> tile_shape = {1, 3, vae_tile_size, vae_tile_size};
+        decoded_tiles.push_back(xt::adapt(tile_output_vec, tile_shape));
+
+        std::cout << "Processed VAE tile " << i + 1 << "/"
+                  << latent_positions.size() << std::endl;
+      }
+
+      output_size = original_output_size;
+      sample_size = original_sample_size;
+
+      pixels =
+          blend_vae_output_tiles(decoded_tiles, output_positions, output_size,
+                                 output_size, vae_tile_size, overlap);
+
+      std::cout << "VAE tiling completed: " << decoded_tiles.size()
+                << " tiles processed and blended" << std::endl;
     }
 
     auto vae_dec_end = std::chrono::high_resolution_clock::now();
@@ -775,8 +1296,6 @@ GenerationResult generateImage(
               << "ms\n";
 
     // --- Post-process Image ---
-    std::vector<int> pixel_shape = {1, 3, output_size, output_size};
-    xt::xarray<float> pixels = xt::adapt(vae_dec_out_pixels, pixel_shape);
     if (request_has_mask)
       pixels =
           xt::eval(original_image * (1.0f - mask_full) + pixels * mask_full);

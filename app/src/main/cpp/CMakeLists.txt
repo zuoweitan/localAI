@@ -83,6 +83,19 @@ else()
     endif()
 endif()
 
+# ZSTD
+set(ZSTD_ROOT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/zstd)
+
+set(ZSTD_BUILD_PROGRAMS OFF CACHE BOOL "Build zstd programs" FORCE)
+set(ZSTD_BUILD_SHARED OFF CACHE BOOL "Build shared zstd library" FORCE)
+set(ZSTD_BUILD_STATIC ON CACHE BOOL "Build static zstd library" FORCE)
+set(ZSTD_MULTITHREAD_SUPPORT OFF CACHE BOOL "Enable multithreading support" FORCE)
+set(ZSTD_BUILD_TESTS OFF CACHE BOOL "Build zstd tests" FORCE)
+
+add_subdirectory(${ZSTD_ROOT_DIR}/build/cmake zstd EXCLUDE_FROM_ALL)
+
+set(ZSTD_INCLUDE_DIR ${ZSTD_ROOT_DIR}/lib)
+
 # MNN
 set(MNN_ROOT_DIR 3rdparty/MNN)
 set(MNN_BUILD_SHARED_LIBS OFF CACHE bool "" FORCE)
@@ -107,6 +120,7 @@ set(PACKAGE_INCLUDES
     ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/xtensor/include
     ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/xtl/include
     ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/xsimd/include
+    ${ZSTD_INCLUDE_DIR}
 
     ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/SampleApp/src/
     ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/SampleApp/src/CachingUtil
@@ -129,17 +143,6 @@ if(ANDROID)
 endif()
 
 add_subdirectory(${TOKENZIER_CPP_PATH} tokenizers EXCLUDE_FROM_ALL)
-# target_compile_options(tokenizers_cpp PRIVATE -Wno-for-loop-analysis)
-# get_directory_property(targets DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/tokenizers-cpp BUILDSYSTEM_TARGETS)
-# if(targets)
-#     foreach(target ${targets})
-#         get_target_property(type ${target} TYPE)
-#         if(NOT type STREQUAL "INTERFACE_LIBRARY")
-#             target_compile_options(${target} PRIVATE -Wno-for-loop-analysis)
-#         endif()
-#     endforeach()
-# endif()
-
 
 # set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/SampleApp/src)
@@ -208,4 +211,5 @@ target_link_libraries(${PROJECT_NAME}
     ${PLATFORM_LIBS}
     MNN
     tokenizers_cpp
+    libzstd
 )

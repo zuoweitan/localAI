@@ -99,6 +99,7 @@ import android.graphics.BitmapFactory
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia
+import androidx.compose.foundation.gestures.detectTransformGestures
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 
@@ -306,6 +307,7 @@ data class GenerationParameters(
 @Composable
 fun ModelRunScreen(
     modelId: String,
+    resolution: Int,
     navController: NavController,
     modifier: Modifier = Modifier
 ) {
@@ -337,7 +339,7 @@ fun ModelRunScreen(
                 prompt = "",
                 negativePrompt = "",
                 generationTime = "",
-                size = if (model?.runOnCpu == true) 256 else model?.generationSize ?: 512,
+                size = if (model?.runOnCpu == true) 256 else resolution,
                 runOnCpu = model?.runOnCpu ?: false
             )
         )
@@ -617,7 +619,7 @@ fun ModelRunScreen(
             steps = prefs.steps
             cfg = prefs.cfg
             seed = prefs.seed
-            size = if (model?.runOnCpu == true) prefs.size else model?.generationSize ?: 512
+            size = if (model?.runOnCpu == true) prefs.size else resolution
             denoiseStrength = prefs.denoiseStrength
         }
     }
@@ -638,6 +640,7 @@ fun ModelRunScreen(
                     if (backendState !is BackendService.BackendState.Running) {
                         val intent = Intent(context, BackendService::class.java).apply {
                             putExtra("modelId", model?.id)
+                            putExtra("resolution", resolution)
                         }
                         context.startForegroundService(intent)
                     }
@@ -701,7 +704,7 @@ fun ModelRunScreen(
                         prompt = generationParamsTmp.prompt,
                         negativePrompt = generationParamsTmp.negativePrompt,
                         generationTime = genTime,
-                        size = if (model?.runOnCpu == true) generationParamsTmp.size else model?.generationSize
+                        size = if (model?.runOnCpu == true) generationParamsTmp.size else resolution
                             ?: 512,
                         runOnCpu = model?.runOnCpu ?: false
                     )
@@ -1977,22 +1980,51 @@ fun ModelRunScreen(
             isPreviewMode = false
         }
 
-        val transformableState = rememberTransformableState { zoomChange, offsetChange, _ ->
-            scale = (scale * zoomChange).coerceIn(0.5f, 5f)
-
-            offsetX += offsetChange.x
-            offsetY += offsetChange.y
-        }
-
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.Black.copy(alpha = 0.9f))
-                .clickable {
-                    scale = 1f
-                    offsetX = 0f
-                    offsetY = 0f
-                    isPreviewMode = false
+                .pointerInput(Unit) {
+                    detectTransformGestures { centroid, pan, zoom, _ ->
+                        val oldScale = scale
+                        scale = (scale * zoom).coerceIn(0.5f, 5f)
+
+                        val centerX = this.size.width / 2f
+                        val centerY = this.size.height / 2f
+
+                        val focusX = (centroid.x - centerX - offsetX) / oldScale
+                        val focusY = (centroid.y - centerY - offsetY) / oldScale
+
+                        offsetX += focusX * oldScale - focusX * scale
+                        offsetY += focusY * oldScale - focusY * scale
+
+                        offsetX += pan.x
+                        offsetY += pan.y
+                    }
+                }
+                .pointerInput(Unit) {
+                    detectTapGestures(
+                        onTap = { offset ->
+                            val centerX = this.size.width / 2f
+                            val centerY = this.size.height / 2f
+                            val imageSize = minOf(this.size.width, this.size.height).toFloat()
+                            val scaledImageSize = imageSize * scale
+
+                            val left = centerX - scaledImageSize / 2f + offsetX
+                            val top = centerY - scaledImageSize / 2f + offsetY
+                            val right = left + scaledImageSize
+                            val bottom = top + scaledImageSize
+
+                            if (offset.x < left || offset.x > right ||
+                                offset.y < top || offset.y > bottom
+                            ) {
+                                scale = 1f
+                                offsetX = 0f
+                                offsetY = 0f
+                                isPreviewMode = false
+                            }
+                        }
+                    )
                 }
         ) {
             Image(
@@ -2002,17 +2034,12 @@ fun ModelRunScreen(
                     .fillMaxWidth()
                     .aspectRatio(1f, matchHeightConstraintsFirst = true)
                     .align(Alignment.Center)
-                    .transformable(state = transformableState)
                     .graphicsLayer(
                         scaleX = scale,
                         scaleY = scale,
                         translationX = offsetX,
                         translationY = offsetY
                     )
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) { }
             )
 
             Box(

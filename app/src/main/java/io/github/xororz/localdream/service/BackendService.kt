@@ -81,12 +81,13 @@ class BackendService : Service() {
         )
 
         val modelId = intent?.getStringExtra("modelId")
+        val resolution = intent?.getIntExtra("resolution", 512) ?: 512
         if (modelId != null) {
             val modelRepository = ModelRepository(this)
             val model = modelRepository.models.find { it.id == modelId }
 
             if (model != null) {
-                if (startBackend(model)) {
+                if (startBackend(model, resolution)) {
                     updateState(BackendState.Running)
                 } else {
                     updateState(BackendState.Error("Backend start failed"))
@@ -186,7 +187,7 @@ class BackendService : Service() {
         target.setExecutable(true, true)
     }
 
-    private fun startBackend(model: Model): Boolean {
+    private fun startBackend(model: Model, resolution: Int): Boolean {
         Log.i(TAG, "backend start, model: ${model.name}")
         updateState(BackendState.Starting)
 
@@ -219,6 +220,11 @@ class BackendService : Service() {
                 "--port", "8081",
                 "--text_embedding_size", model.textEmbeddingSize.toString()
             )
+            if (resolution > 512) {
+                command = command + listOf(
+                    "--patch", File(modelsDir, "$resolution.patch").absolutePath,
+                )
+            }
             if (useImg2img) {
                 command = command + listOf(
                     "--vae_encoder", File(modelsDir, "vae_encoder.bin").absolutePath,

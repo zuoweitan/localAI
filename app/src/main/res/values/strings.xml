@@ -57,6 +57,9 @@
     <string name="no_cpu_models">No Models</string>
     <string name="no_npu_models">No Models</string>
     <string name="img2img_hint">Use img2img feature. Turn off if you don\'t need or encounter any problems.</string>
+    <string name="download_patch">Download High Resolution Patch</string>
+    <string name="download_patch_hint">Download %1$dx%1$d high resolution patch for %2$s? This will enable %1$dpx generation.</string>
+    <string name="highres_patch">HighRes Patch</string>
 
     <!-- Crop Screen -->
     <string name="crop_image">Crop Image</string>

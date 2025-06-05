@@ -23,6 +23,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -85,6 +86,11 @@ fun ModelListScreen(
     var downloadError by remember { mutableStateOf<String?>(null) }
     var showDownloadConfirm by remember { mutableStateOf<Model?>(null) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    var showHighresDownloadConfirm by remember { mutableStateOf<Pair<Model, Int>?>(null) }
+    var downloadingHighres by remember { mutableStateOf<Pair<String, Int>?>(null) }
+    var highresProgress by remember { mutableStateOf<DownloadProgress?>(null) }
+    var showHighres404Dialog by remember { mutableStateOf<String?>(null) }
 
     var isSelectionMode by remember { mutableStateOf(false) }
     var selectedModels by remember { mutableStateOf(setOf<Model>()) }
@@ -371,7 +377,98 @@ fun ModelListScreen(
             )
         }
     }
+    showHighres404Dialog?.let { errorMessage ->
+        AlertDialog(
+            onDismissRequest = { showHighres404Dialog = null },
+            title = {
+                Text(
+                    text = "High Resolution Patch Not Found",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            },
+            text = {
+                Text(
+                    text = errorMessage,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { showHighres404Dialog = null }) {
+                    Text("Got it")
+                }
+            },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Error,
+                    contentDescription = "Error",
+                    tint = MaterialTheme.colorScheme.error
+                )
+            }
+        )
+    }
+    showHighresDownloadConfirm?.let { (model, resolution) ->
+        AlertDialog(
+            onDismissRequest = { showHighresDownloadConfirm = null },
+            title = {
+                Text(stringResource(R.string.download_patch))
+            },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.download_patch_hint,
+                        resolution,
+                        model.name,
+                    )
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showHighresDownloadConfirm = null
+                        scope.launch {
+                            downloadingHighres = Pair(model.id, resolution)
+                            highresProgress = null
 
+                            model.downloadHighresPatch(context, resolution).collect { result ->
+                                when (result) {
+                                    is DownloadResult.Progress -> {
+                                        highresProgress = result.progress
+                                    }
+
+                                    is DownloadResult.Success -> {
+                                        modelRepository.refreshModelState(model.id)
+                                        downloadingHighres = null
+                                        highresProgress = null
+                                        snackbarHostState.showSnackbar("${resolution}px patch downloaded successfully")
+                                    }
+
+                                    is DownloadResult.Error -> {
+                                        downloadingHighres = null
+                                        highresProgress = null
+
+                                        if (result.message.startsWith("PATCH_NOT_FOUND|")) {
+                                            showHighres404Dialog =
+                                                result.message.substringAfter("PATCH_NOT_FOUND|")
+                                        } else {
+                                            downloadError = result.message
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                ) {
+                    Text("Confirm")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showHighresDownloadConfirm = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
     Scaffold(
         topBar = {
             LargeTopAppBar(
@@ -477,6 +574,10 @@ fun ModelListScreen(
                             downloadProgress = if (model == downloadingModel) currentProgress else null,
                             isSelected = selectedModels.contains(model),
                             isSelectionMode = isSelectionMode,
+                            downloadingHighres = downloadingHighres?.let { (modelId, resolution) ->
+                                if (modelId == model.id) resolution else null
+                            },
+                            highresProgress = if (downloadingHighres?.first == model.id) highresProgress else null,
                             onClick = {
                                 if (!Model.isDeviceSupported() && !model.runOnCpu) {
                                     scope.launch {
@@ -497,7 +598,7 @@ fun ModelListScreen(
                                         }
                                     }
                                 } else {
-                                    if (downloadingModel != null) {
+                                    if (downloadingModel != null || downloadingHighres != null) {
                                         scope.launch {
                                             snackbarHostState.showSnackbar(context.getString(R.string.cannot_download_hint))
                                         }
@@ -523,6 +624,20 @@ fun ModelListScreen(
                                     isSelectionMode = true
                                     selectedModels = setOf(model)
                                 }
+                            },
+                            onHighresDownload = { resolution ->
+                                if (downloadingModel == null && downloadingHighres == null) {
+                                    showHighresDownloadConfirm = Pair(model, resolution)
+                                }
+                            },
+                            onHighresClick = { resolution ->
+                                if (downloadingModel != null || downloadingHighres != null) {
+                                    scope.launch {
+                                        snackbarHostState.showSnackbar(context.getString(R.string.cannot_download_hint))
+                                    }
+                                    return@ModelCard
+                                }
+                                navController.navigate(Screen.ModelRun.createRoute("${model.id}?resolution=$resolution"))
                             }
                         )
                     }
@@ -602,8 +717,13 @@ fun ModelCard(
     isSelectionMode: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
+    onHighresDownload: (Int) -> Unit,
+    onHighresClick: (Int) -> Unit,
+    downloadingHighres: Int? = null,
+    highresProgress: DownloadProgress? = null,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val elevation by animateFloatAsState(
         targetValue = if (isSelected) 8f else 1f,
         animationSpec = spring(
@@ -809,56 +929,193 @@ fun ModelCard(
                     }
                 }
 
-                if (isDownloading && downloadProgress != null) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Column {
+                if (!model.runOnCpu && model.isDownloaded && model.supportedHighres.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text(
-                            text = stringResource(
-                                R.string.downloading_file,
-                                downloadProgress.currentFileIndex,
-                                downloadProgress.totalFiles,
-                                downloadProgress.displayName
-                            ),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = contentColor.copy(alpha = 0.6f)
+                            text = stringResource(R.string.highres_patch),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = contentColor.copy(alpha = 0.8f),
+                            fontWeight = FontWeight.Medium
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
 
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(4.dp)
-                                .clip(RoundedCornerShape(3.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth(downloadProgress.progress)
-                                    .fillMaxHeight()
-                                    .background(
-                                        if (model.runOnCpu)
-                                            MaterialTheme.colorScheme.tertiary
-                                        else
-                                            MaterialTheme.colorScheme.primary
-                                    )
-                            )
-                        }
-
-                        if (downloadProgress.totalBytes > 0) {
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "${formatFileSize(downloadProgress.downloadedBytes)} / ${
-                                    formatFileSize(
-                                        downloadProgress.totalBytes
-                                    )
-                                }",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = contentColor.copy(alpha = 0.6f)
-                            )
+                            model.supportedHighres.forEach { resolution ->
+                                HighresButton(
+                                    resolution = resolution,
+                                    isDownloaded = model.isHighresDownloaded(context, resolution),
+                                    isDownloading = downloadingHighres == resolution,
+                                    isEnabled = !isDownloading && downloadingHighres == null,
+                                    onClick = {
+                                        if (model.isHighresDownloaded(context, resolution)) {
+                                            onHighresClick(resolution)
+                                        } else {
+                                            onHighresDownload(resolution)
+                                        }
+                                    }
+                                )
+                            }
                         }
                     }
                 }
+
+                if (isDownloading && downloadProgress != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    DownloadProgressIndicator(
+                        progress = downloadProgress,
+                        contentColor = contentColor,
+                        model = model
+                    )
+                }
+
+                if (downloadingHighres != null && highresProgress != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    DownloadProgressIndicator(
+                        progress = highresProgress,
+                        contentColor = contentColor,
+                        model = model,
+                        isHighres = true
+                    )
+                }
             }
+        }
+    }
+}
+
+@Composable
+private fun HighresButton(
+    resolution: Int,
+    isDownloaded: Boolean,
+    isDownloading: Boolean,
+    isEnabled: Boolean,
+    onClick: () -> Unit
+) {
+    val buttonColors = when {
+        isDownloaded -> ButtonDefaults.filledTonalButtonColors(
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary
+        )
+
+        isDownloading -> ButtonDefaults.filledTonalButtonColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        else -> ButtonDefaults.outlinedButtonColors(
+            contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = if (isEnabled) 1f else 0.5f)
+        )
+    }
+
+    if (isDownloaded) {
+        FilledTonalButton(
+            onClick = onClick,
+            enabled = isEnabled,
+            colors = buttonColors,
+            modifier = Modifier.height(28.dp),
+            contentPadding = PaddingValues(horizontal = 8.dp)
+        ) {
+            Text(
+                text = "${resolution}px",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Medium
+            )
+        }
+    } else {
+        OutlinedButton(
+            onClick = onClick,
+            enabled = isEnabled && !isDownloading,
+            colors = buttonColors,
+            modifier = Modifier.height(28.dp),
+            contentPadding = PaddingValues(horizontal = 8.dp),
+            border = BorderStroke(
+                width = 1.dp,
+                color = if (isEnabled && !isDownloading)
+                    MaterialTheme.colorScheme.outline
+                else
+                    MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+            )
+        ) {
+            if (isDownloading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(10.dp),
+                    strokeWidth = 1.dp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.width(3.dp))
+            }
+            Text(
+                text = "${resolution}px",
+                style = MaterialTheme.typography.labelSmall
+            )
+        }
+    }
+}
+
+@Composable
+private fun DownloadProgressIndicator(
+    progress: DownloadProgress,
+    contentColor: Color,
+    model: Model,
+    isHighres: Boolean = false
+) {
+    Column {
+        Text(
+            text = if (isHighres) {
+                stringResource(
+                    R.string.downloading_file,
+                    1,
+                    1,
+                    progress.displayName
+                )
+            } else {
+                stringResource(
+                    R.string.downloading_file,
+                    progress.currentFileIndex,
+                    progress.totalFiles,
+                    progress.displayName
+                )
+            },
+            style = MaterialTheme.typography.labelSmall,
+            color = contentColor.copy(alpha = 0.6f)
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(4.dp)
+                .clip(RoundedCornerShape(3.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(progress.progress)
+                    .fillMaxHeight()
+                    .background(
+                        if (model.runOnCpu)
+                            MaterialTheme.colorScheme.tertiary
+                        else
+                            MaterialTheme.colorScheme.primary
+                    )
+            )
+        }
+
+        if (progress.totalBytes > 0) {
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = "${formatFileSize(progress.downloadedBytes)} / ${
+                    formatFileSize(progress.totalBytes)
+                }",
+                style = MaterialTheme.typography.labelSmall,
+                color = contentColor.copy(alpha = 0.6f)
+            )
         }
     }
 }
