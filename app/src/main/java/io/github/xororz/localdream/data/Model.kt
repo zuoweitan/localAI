@@ -15,6 +15,11 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.io.File
+import java.security.MessageDigest
+import java.io.FileInputStream
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.util.concurrent.TimeUnit
 
 private fun getDeviceSoc(): String {
     return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -28,6 +33,13 @@ data class ModelFile(
     val name: String,
     val displayName: String,
     val uri: String
+)
+
+data class HighresInfo(
+    val size: Int,
+    val patchFileName: String,
+    val isDownloaded: Boolean = false,
+    val isDownloading: Boolean = false
 )
 
 data class DownloadProgress(
@@ -72,8 +84,41 @@ data class Model(
     val defaultPrompt: String = "",
     val defaultNegativePrompt: String = "",
     val runOnCpu: Boolean = false,
-    val useCpuClip: Boolean = false
+    val useCpuClip: Boolean = false,
+    val supportedHighres: List<Int> = emptyList(),
+    val highresInfo: Map<Int, HighresInfo> = emptyMap()
+
 ) {
+    private fun calculateFileMD5(file: File): String? {
+        return try {
+            val md = MessageDigest.getInstance("MD5")
+            FileInputStream(file).use { fis ->
+                val buffer = ByteArray(8192)
+                var bytesRead: Int
+                while (fis.read(buffer).also { bytesRead = it } != -1) {
+                    md.update(buffer, 0, bytesRead)
+                }
+            }
+            md.digest().joinToString("") { "%02x".format(it) }
+        } catch (e: Exception) {
+            android.util.Log.e("Model", "Failed to calculate MD5 for ${file.name}", e)
+            null
+        }
+    }
+
+    private fun getUnetMD5Prefix(context: Context): String? {
+        val modelDir = File(getModelsDir(context), id)
+        val unetFile = File(modelDir, "unet.bin")
+
+        if (!unetFile.exists()) {
+            android.util.Log.e("Model", "unet.bin not found for model $id")
+            return null
+        }
+
+        val fullMD5 = calculateFileMD5(unetFile)
+        return fullMD5?.take(6)
+    }
+
     fun download(context: Context): Flow<DownloadResult> = flow {
         val modelsDir = getModelsDir(context)
         val modelDir = File(modelsDir, id).apply {
@@ -97,6 +142,101 @@ data class Model(
             emit(DownloadResult.Error(e.message ?: "Download failed"))
         }
     }.flowOn(Dispatchers.IO)
+
+    private suspend fun checkUrlExists(url: String): Int {
+        return try {
+            val client = OkHttpClient.Builder()
+                .connectTimeout(10, TimeUnit.SECONDS)
+                .readTimeout(10, TimeUnit.SECONDS)
+                .build()
+
+            val request = Request.Builder()
+                .url(url)
+                .head()
+                .build()
+
+            val response = client.newCall(request).execute()
+            response.use { it.code }
+        } catch (e: Exception) {
+            android.util.Log.e("Model", "Failed to check URL: $url", e)
+            500
+        }
+    }
+
+    fun downloadHighresPatch(context: Context, resolution: Int): Flow<DownloadResult> = flow {
+        val modelsDir = getModelsDir(context)
+        val modelDir = File(modelsDir, id).apply {
+            if (!exists()) mkdirs()
+        }
+
+        val md5Prefix = getUnetMD5Prefix(context)
+        if (md5Prefix == null) {
+            emit(DownloadResult.Error("Cannot calculate MD5 of unet.bin, please ensure base model is fully downloaded"))
+            return@flow
+        }
+
+        val patchFileNameWithMD5 = "${resolution}.patch.${md5Prefix}"
+
+        val repoPath = when (id) {
+            "anythingv5" -> "xororz/AnythingV5"
+            "qteamix" -> "xororz/QteaMix"
+            "cuteyukimix" -> "xororz/CuteYukiMix"
+            "absolutereality" -> "xororz/AbsoluteReality"
+            "chilloutmix" -> "xororz/ChilloutMix"
+            else -> {
+                emit(DownloadResult.Error("Unsupported model type"))
+                return@flow
+            }
+        }
+
+        val patchFileUri = "${repoPath}/resolve/main/patch/${patchFileNameWithMD5}"
+        val fullUrl = "${baseUrl.removeSuffix("/")}/${patchFileUri}"
+
+        val statusCode = checkUrlExists(fullUrl)
+        if (statusCode == 404) {
+            emit(DownloadResult.Error("PATCH_NOT_FOUND|Cannot find high resolution patch file matching current base model.\n\nThis usually means your base model version is outdated.\n\nPlease delete current model and download the latest version to get highres support.\n\nError code: MD5-${md5Prefix}"))
+            return@flow
+        } else if (statusCode != 200) {
+            emit(DownloadResult.Error("Network error: HTTP $statusCode"))
+            return@flow
+        }
+
+        val patchFile = ModelFile(
+            name = "${resolution}.patch",
+            displayName = "${resolution}.patch",
+            uri = patchFileUri
+        )
+
+        val downloadManager = DownloadManager(context)
+
+        try {
+            downloadManager.downloadWithResume(
+                modelId = id,
+                files = listOf(patchFile),
+                baseUrl = baseUrl,
+                modelDir = modelDir
+            ).collect { result ->
+                emit(result)
+            }
+        } catch (e: Exception) {
+            emit(DownloadResult.Error(e.message ?: "High resolution patch download failed"))
+        }
+    }.flowOn(Dispatchers.IO)
+
+    fun isHighresDownloaded(context: Context, resolution: Int): Boolean {
+        val modelDir = File(getModelsDir(context), id)
+        val patchFile = File(modelDir, "${resolution}.patch")
+
+        if (!patchFile.exists()) {
+            return false
+        }
+
+        val fileVerification = FileVerification(context)
+        return runBlocking {
+            val savedSize = fileVerification.getFileSize(id, "${resolution}.patch")
+            savedSize != null && patchFile.length() == savedSize
+        }
+    }
 
     fun deleteModel(context: Context): Boolean {
         return try {
@@ -134,7 +274,11 @@ data class Model(
             }
         }
 
-        fun checkModelDownloadStatus(context: Context, modelId: String, files: List<ModelFile>): Pair<Boolean, Boolean> {
+        fun checkModelDownloadStatus(
+            context: Context,
+            modelId: String,
+            files: List<ModelFile>
+        ): Pair<Boolean, Boolean> {
             val modelDir = File(getModelsDir(context), modelId)
             val fileVerification = FileVerification(context)
 
@@ -193,6 +337,21 @@ class ModelRepository(private val context: Context) {
         models = initializeModels()
     }
 
+    private fun checkHighresPatchExists(modelId: String, resolution: Int): Boolean {
+        val modelDir = File(Model.getModelsDir(context), modelId)
+        val patchFile = File(modelDir, "${resolution}.patch")
+
+        if (!patchFile.exists()) {
+            return false
+        }
+
+        val fileVerification = FileVerification(context)
+        return runBlocking {
+            val savedSize = fileVerification.getFileSize(modelId, "${resolution}.patch")
+            savedSize != null && patchFile.length() == savedSize
+        }
+    }
+
     private fun initializeModels(): List<Model> {
         var modelList = listOf(
             createAnythingV5Model(),
@@ -205,16 +364,11 @@ class ModelRepository(private val context: Context) {
             createCuteYukiMixModelCPU(),
             createChilloutMixModelCPU(),
             createChilloutMixModel(),
-            createPonyV55Model(),
             createSD21Model(),
         )
-        if (BuildConfig.FLAVOR == "filter") {
-            modelList = modelList.filter { model ->
-                model.id != "ponyv55_640"
-            }
-        }
         return modelList
     }
+
     private fun createAnythingV5Model(): Model {
         val id = "anythingv5"
         val soc = getDeviceSoc()
@@ -251,6 +405,14 @@ class ModelRepository(private val context: Context) {
             id,
             files
         )
+        val supportedHighres = listOf(768, 1024)
+        val highresInfo = supportedHighres.associateWith { resolution ->
+            HighresInfo(
+                size = resolution,
+                patchFileName = "${resolution}.patch",
+                isDownloaded = checkHighresPatchExists(id, resolution)
+            )
+        }
 
         return Model(
             id = id,
@@ -263,7 +425,9 @@ class ModelRepository(private val context: Context) {
             isPartiallyDownloaded = partiallyDownloaded,
             defaultPrompt = "masterpiece, best quality, 1girl, solo, cute, white hair,",
             defaultNegativePrompt = "bad anatomy, bad hands, missing fingers, extra fingers, bad arms, missing legs, missing arms, poorly drawn face, bad face, fused face, cloned face, three crus, fused feet, fused thigh, extra crus, ugly fingers, horn, realistic photo, huge eyes, worst face, 2girl, long fingers, disconnected limbs,",
-            useCpuClip = true
+            useCpuClip = true,
+            supportedHighres = supportedHighres,
+            highresInfo = highresInfo
         )
     }
 
@@ -313,6 +477,7 @@ class ModelRepository(private val context: Context) {
             runOnCpu = true
         )
     }
+
     private fun createQteaMixModel(): Model {
         val id = "qteamix"
         val soc = getDeviceSoc()
@@ -349,6 +514,14 @@ class ModelRepository(private val context: Context) {
             id,
             files
         )
+        val supportedHighres = listOf(768, 1024)
+        val highresInfo = supportedHighres.associateWith { resolution ->
+            HighresInfo(
+                size = resolution,
+                patchFileName = "${resolution}.patch",
+                isDownloaded = checkHighresPatchExists(id, resolution)
+            )
+        }
 
         return Model(
             id = id,
@@ -361,9 +534,12 @@ class ModelRepository(private val context: Context) {
             isPartiallyDownloaded = partiallyDownloaded,
             defaultPrompt = "chibi, best quality, 1girl, solo, cute, pink hair,",
             defaultNegativePrompt = "bad anatomy, bad hands, missing fingers, extra fingers, bad arms, missing legs, missing arms, poorly drawn face, bad face, fused face, cloned face, three crus, fused feet, fused thigh, extra crus, ugly fingers, horn, realistic photo, huge eyes, worst face, 2girl, long fingers, disconnected limbs,",
-            useCpuClip = true
+            useCpuClip = true,
+            supportedHighres = supportedHighres,
+            highresInfo = highresInfo
         )
     }
+
     private fun createQteaMixModelCPU(): Model {
         val id = "qteamixcpu"
         val files = listOf(
@@ -410,6 +586,7 @@ class ModelRepository(private val context: Context) {
             runOnCpu = true
         )
     }
+
     private fun createCuteYukiMixModel(): Model {
         val id = "cuteyukimix"
         val soc = getDeviceSoc()
@@ -446,6 +623,14 @@ class ModelRepository(private val context: Context) {
             id,
             files
         )
+        val supportedHighres = listOf(768, 1024)
+        val highresInfo = supportedHighres.associateWith { resolution ->
+            HighresInfo(
+                size = resolution,
+                patchFileName = "${resolution}.patch",
+                isDownloaded = checkHighresPatchExists(id, resolution)
+            )
+        }
 
         return Model(
             id = id,
@@ -458,9 +643,12 @@ class ModelRepository(private val context: Context) {
             isPartiallyDownloaded = partiallyDownloaded,
             defaultPrompt = "masterpiece, best quality, 1girl, solo, cute, white hair,",
             defaultNegativePrompt = "bad anatomy, bad hands, missing fingers, extra fingers, bad arms, missing legs, missing arms, poorly drawn face, bad face, fused face, cloned face, three crus, fused feet, fused thigh, extra crus, ugly fingers, horn, realistic photo, huge eyes, worst face, 2girl, long fingers, disconnected limbs,",
-            useCpuClip = true
+            useCpuClip = true,
+            supportedHighres = supportedHighres,
+            highresInfo = highresInfo
         )
     }
+
     private fun createCuteYukiMixModelCPU(): Model {
         val id = "cuteyukimixcpu"
         val files = listOf(
@@ -507,6 +695,7 @@ class ModelRepository(private val context: Context) {
             runOnCpu = true
         )
     }
+
     private fun createAbsoluteRealityModel(): Model {
         val id = "absolutereality"
         val soc = getDeviceSoc()
@@ -539,6 +728,14 @@ class ModelRepository(private val context: Context) {
             id,
             files
         )
+        val supportedHighres = listOf(768, 1024)
+        val highresInfo = supportedHighres.associateWith { resolution ->
+            HighresInfo(
+                size = resolution,
+                patchFileName = "${resolution}.patch",
+                isDownloaded = checkHighresPatchExists(id, resolution)
+            )
+        }
 
         return Model(
             id = id,
@@ -552,7 +749,9 @@ class ModelRepository(private val context: Context) {
             defaultPrompt = "masterpiece, best quality, ultra-detailed, realistic, 8k, a cat on grass,",
             defaultNegativePrompt = "worst quality, low quality, normal quality, poorly drawn, lowres, low resolution, signature, watermarks, ugly, out of focus, error, blurry, unclear photo, bad photo, unrealistic, semi realistic, pixelated, cartoon, anime, cgi, drawing, 2d, 3d, censored, duplicate,",
             runOnCpu = false,
-            useCpuClip = true
+            useCpuClip = true,
+            supportedHighres = supportedHighres,
+            highresInfo = highresInfo
         )
     }
 
@@ -635,6 +834,14 @@ class ModelRepository(private val context: Context) {
             id,
             files
         )
+        val supportedHighres = listOf(768, 1024)
+        val highresInfo = supportedHighres.associateWith { resolution ->
+            HighresInfo(
+                size = resolution,
+                patchFileName = "${resolution}.patch",
+                isDownloaded = checkHighresPatchExists(id, resolution)
+            )
+        }
 
         return Model(
             id = id,
@@ -649,6 +856,8 @@ class ModelRepository(private val context: Context) {
             defaultNegativePrompt = "paintings, sketches, worst quality, low quality, normal quality, lowres, monochrome, grayscale, skin spots, acnes, skin blemishes, age spot, bad anatomy, bad hands, bad body, bad proportions, gross proportions, extra fingers, fewer fingers, extra digit, missing fingers, fused fingers, extra arms, missing arms, extra legs, missing legs, extra limbs, mutated hands, poorly drawn hands, poorly drawn face, mutation, deformed, blurry, watermark, white letters, signature, text, error, jpeg artifacts, duplicate, morbid, mutilated, cross-eyed, long neck, ng_deepnegative_v1_75t, easynegative, bad-picture-chill-75v, bad-artist",
             runOnCpu = false,
             useCpuClip = true,
+            supportedHighres = supportedHighres,
+            highresInfo = highresInfo
         )
     }
 
@@ -747,63 +956,14 @@ class ModelRepository(private val context: Context) {
         )
     }
 
-    private fun createPonyV55Model(): Model {
-        val id = "ponyv55_640"
-        val soc = getDeviceSoc()
-        val files = listOf(
-            ModelFile(
-                "tokenizer.json",
-                "tokenizer",
-                "xororz/PonyV55/resolve/main/tokenizer.json"
-            ),
-            ModelFile(
-                "clip.bin",
-                "clip",
-                "xororz/PonyV55/resolve/main/clip_${chipsetModelSuffixes[soc]}.bin"
-            ),
-            ModelFile(
-                "vae_encoder.bin",
-                "vae_encoder",
-                "xororz/PonyV55/resolve/main/vae_encoder_${chipsetModelSuffixes[soc]}.bin"
-            ),
-            ModelFile(
-                "vae_decoder.bin",
-                "vae_decoder",
-                "xororz/PonyV55/resolve/main/vae_decoder_${chipsetModelSuffixes[soc]}.bin"
-            ),
-            ModelFile(
-                "unet.bin",
-                "unet",
-                "xororz/PonyV55/resolve/main/unet_${chipsetModelSuffixes[soc]}.bin"
-            )
-        )
-
-        val (fullyDownloaded, partiallyDownloaded) = Model.checkModelDownloadStatus(
-            context,
-            id,
-            files
-        )
-
-        return Model(
-            id = id,
-            name = "Pony V5.5",
-            description = context.getString(R.string.ponyv55_description),
-            baseUrl = baseUrl,
-            files = files,
-            generationSize = 640,
-            textEmbeddingSize = 1024,
-            approximateSize = "1.3GB",
-            isDownloaded = fullyDownloaded,
-            isPartiallyDownloaded = partiallyDownloaded,
-            defaultPrompt = "score_9, feral pony princess cadance swimming in a beautiful lake, reflections, night, moon and stars, solo",
-            defaultNegativePrompt = "lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, jpeg artifacts, signature, watermark, username, blurry"
-        )
-    }
-
     fun refreshModelState(modelId: String) {
         models = models.map { model ->
             if (model.id == modelId) {
-                val (fullyDownloaded, partiallyDownloaded) = Model.checkModelDownloadStatus(context, modelId, model.files)
+                val (fullyDownloaded, partiallyDownloaded) = Model.checkModelDownloadStatus(
+                    context,
+                    modelId,
+                    model.files
+                )
                 model.copy(
                     isDownloaded = fullyDownloaded,
                     isPartiallyDownloaded = partiallyDownloaded
@@ -816,7 +976,11 @@ class ModelRepository(private val context: Context) {
 
     fun refreshAllModels() {
         models = models.map { model ->
-            val (fullyDownloaded, partiallyDownloaded) = Model.checkModelDownloadStatus(context, model.id, model.files)
+            val (fullyDownloaded, partiallyDownloaded) = Model.checkModelDownloadStatus(
+                context,
+                model.id,
+                model.files
+            )
             model.copy(
                 isDownloaded = fullyDownloaded,
                 isPartiallyDownloaded = partiallyDownloaded

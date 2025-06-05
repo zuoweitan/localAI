@@ -127,11 +127,22 @@ class MainActivity : ComponentActivity() {
                         composable(
                             route = Screen.ModelRun.route,
                             arguments = listOf(
-                                navArgument("modelId") { type = NavType.StringType }
+                                navArgument("modelId") {
+                                    type = NavType.StringType
+                                },
+                                navArgument("resolution") {
+                                    type = NavType.IntType
+                                    defaultValue = 512
+                                    nullable = false
+                                }
                             )
                         ) { backStackEntry ->
+                            val modelId = backStackEntry.arguments?.getString("modelId") ?: ""
+                            val resolution = backStackEntry.arguments?.getInt("resolution") ?: 512
+
                             ModelRunScreen(
-                                modelId = backStackEntry.arguments?.getString("modelId") ?: "",
+                                modelId = modelId,
+                                resolution = resolution,
                                 navController = navController
                             )
                         }

@@ -57,6 +57,10 @@
     <string name="no_cpu_models">暂无模型</string>
     <string name="no_npu_models">暂无模型</string>
     <string name="img2img_hint">开启img2img功能，如果你不需要或遇到问题请关闭</string>
+    <string name="download_patch">下载高分辨率补丁</string>
+    <string name="download_patch_hint">要为模型%2$s下载%1$dx%1$d分辨率补丁吗? 使模型能够生成%1$d分辨率图像</string>
+    <string name="highres_patch">HighRes Patch</string>
+
 
     <!-- Crop Screen -->
     <string name="crop_image">裁剪图像</string>
