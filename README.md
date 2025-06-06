@@ -127,9 +127,28 @@ The application supports custom seed settings for reproducible results:
 - CPU Mode: Seeds guarantee identical results across different devices with the same parameters
 - NPU Mode: Seeds ensure consistent results only on devices with identical chipsets
 
+## Credits
+
+### Cpp
+
+- [Qualcomm QNN SDK](https://www.qualcomm.com/developer/software/neural-processing-sdk-for-ai), for executing models on NPU
+- [alibaba/MNN](https://github.com/alibaba/MNN/), for executing models on CPU
+- [xtensor-stack](https://github.com/xtensor-stack), for tensor setup and computing, scheduler implementation
+- [mlc-ai/tokenizers-cpp](https://github.com/mlc-ai/tokenizers-cpp), for tokenizing user prompt
+- [yhirose/cpp-httplib](https://github.com/yhirose/cpp-httplib), for http-server
+- [nothings/stb](https://github.com/nothings/stb), for image processing
+- [facebook/zstd](https://github.com/facebook/zstd), for model patching, reducing download size
+- [nlohmann/json](https://github.com/nlohmann/json), for json processing
+
+### Android
+
+- [coil-kt/coil](https://github.com/coil-kt/coil), for image processing
+- [MoyuruAizawa/Cropify](https://github.com/MoyuruAizawa/Cropify), for image cropper
+- AOSP, Material Design, Jetpack Compose and other projects
+
 ## Sponsorship
 
-If you like this project, please consider sponsoring this it. Your support will help me implement:
+If you like this project, please consider sponsoring it. Your support will help me implement:
 
 - Additional models
 - New features
