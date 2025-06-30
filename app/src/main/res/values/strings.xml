@@ -111,6 +111,7 @@
     <string name="basic_seed">Seed: %s</string>
     <string name="basic_runtime">Runtime: %s</string>
     <string name="basic_time">Time: %s</string>
+    <string name="opencl_warning">GPU runtime warning: The first run at each resolution will be slow as it generates cache files. Subsequent runs will be much faster.</string>
 
     <!-- Error Messages -->
     <string name="error_device_not_supported">Your device is not supported yet, please use CPU version</string>

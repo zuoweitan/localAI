@@ -264,7 +264,8 @@ class BackendService : Service() {
             val systemLibPaths = listOf(
                 nativeDir,
                 "/system/lib64",
-                "/vendor/lib64"
+                "/vendor/lib64",
+                "/vendor/lib64/egl"
             ).joinToString(":")
 
             env["LD_LIBRARY_PATH"] = systemLibPaths

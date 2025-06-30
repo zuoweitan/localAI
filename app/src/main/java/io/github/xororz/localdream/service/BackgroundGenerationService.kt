@@ -90,6 +90,7 @@ class BackgroundGenerationService : Service() {
         val seed = if (intent.hasExtra("seed")) intent.getLongExtra("seed", 0) else null
         val size = intent.getIntExtra("size", 512)
         val denoiseStrength = intent.getFloatExtra("denoise_strength", 0.6f)
+        val useOpenCL = intent.getBooleanExtra("use_opencl", false)
 
         val image = if (intent.getBooleanExtra("has_image", false)) {
             try {
@@ -133,7 +134,7 @@ class BackgroundGenerationService : Service() {
 
         serviceScope.launch {
             android.util.Log.d("GenerationService", "start generation")
-            runGeneration(prompt, negativePrompt, steps, cfg, seed, size, image, mask, denoiseStrength)
+            runGeneration(prompt, negativePrompt, steps, cfg, seed, size, image, mask, denoiseStrength, useOpenCL)
         }
 
         return START_NOT_STICKY
@@ -148,7 +149,8 @@ class BackgroundGenerationService : Service() {
         size: Int,
         image: String?,
         mask: String?,
-        denoiseStrength: Float
+        denoiseStrength: Float,
+        useOpenCL: Boolean
     ) = withContext(Dispatchers.IO) {
         try {
             updateState(GenerationState.Progress(0f))
@@ -161,15 +163,16 @@ class BackgroundGenerationService : Service() {
                 put("use_cfg", true)
                 put("size", size)
                 put("denoise_strength", denoiseStrength)
+                put("use_opencl", useOpenCL)
                 seed?.let { put("seed", it) }
                 image?.let { put("image", it) }
                 mask?.let { put("mask", it) }
             }
 
             val client = OkHttpClient.Builder()
-                .connectTimeout(300, TimeUnit.SECONDS)
-                .readTimeout(300, TimeUnit.SECONDS)
-                .writeTimeout(300, TimeUnit.SECONDS)
+                .connectTimeout(3600, TimeUnit.SECONDS)
+                .readTimeout(3600, TimeUnit.SECONDS)
+                .writeTimeout(3600, TimeUnit.SECONDS)
                 .callTimeout(3600, TimeUnit.SECONDS)
                 .retryOnConnectionFailure(true)
                 .build()

@@ -299,7 +299,8 @@ data class GenerationParameters(
     val size: Int,
     val runOnCpu: Boolean,
     val denoiseStrength: Float = 0.6f,
-    val inputImage: String? = null
+    val inputImage: String? = null,
+    val useOpenCL: Boolean = false
 )
 
 @SuppressLint("DefaultLocale")
@@ -326,6 +327,7 @@ fun ModelRunScreen(
     val interactionSource = remember { MutableInteractionSource() }
 
     var showResetConfirmDialog by remember { mutableStateOf(false) }
+    var showOpenCLWarningDialog by remember { mutableStateOf(false) }
 
     var currentBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var imageVersion by remember { mutableStateOf(0) }
@@ -351,6 +353,7 @@ fun ModelRunScreen(
     var seed by remember { mutableStateOf("") }
     var size by remember { mutableStateOf(if (model?.runOnCpu == true) 256 else 512) }
     var denoiseStrength by remember { mutableStateOf(0.6f) }
+    var useOpenCL by remember { mutableStateOf(false) }
     var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
     var base64EncodeDone by remember { mutableStateOf(false) }
     var returnedSeed by remember { mutableStateOf<Long?>(null) }
@@ -397,7 +400,8 @@ fun ModelRunScreen(
                 cfg = cfg,
                 seed = seed,
                 size = size,
-                denoiseStrength = denoiseStrength
+                denoiseStrength = denoiseStrength,
+                useOpenCL = useOpenCL
             )
         }
     }
@@ -621,6 +625,7 @@ fun ModelRunScreen(
             seed = prefs.seed
             size = if (model?.runOnCpu == true) prefs.size else resolution
             denoiseStrength = prefs.denoiseStrength
+            useOpenCL = prefs.useOpenCL
         }
     }
     DisposableEffect(Unit) {
@@ -641,6 +646,7 @@ fun ModelRunScreen(
                         val intent = Intent(context, BackendService::class.java).apply {
                             putExtra("modelId", model?.id)
                             putExtra("resolution", resolution)
+                            putExtra("use_opencl", useOpenCL)
                         }
                         context.startForegroundService(intent)
                     }
@@ -706,7 +712,8 @@ fun ModelRunScreen(
                         generationTime = genTime,
                         size = if (model?.runOnCpu == true) generationParamsTmp.size else resolution
                             ?: 512,
-                        runOnCpu = model?.runOnCpu ?: false
+                        runOnCpu = model?.runOnCpu ?: false,
+                        useOpenCL = generationParamsTmp.useOpenCL
                     )
 
                     android.util.Log.d(
@@ -761,6 +768,29 @@ fun ModelRunScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showExitDialog = false }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
+    }
+    if (showOpenCLWarningDialog) {
+        AlertDialog(
+            onDismissRequest = { showOpenCLWarningDialog = false },
+            title = { Text("GPU Runtime Warning") },
+            text = { Text(stringResource(R.string.opencl_warning)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showOpenCLWarningDialog = false
+                        useOpenCL = true
+                        saveAllFields()
+                    }
+                ) {
+                    Text(stringResource(R.string.confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showOpenCLWarningDialog = false }) {
                     Text(stringResource(R.string.cancel))
                 }
             }
@@ -992,7 +1022,7 @@ fun ModelRunScreen(
                                                     text = {
                                                         Column(
                                                             verticalArrangement = Arrangement.spacedBy(
-                                                                16.dp
+                                                                8.dp
                                                             ),
                                                             modifier = Modifier.padding(vertical = 8.dp)
                                                         ) {
@@ -1033,7 +1063,9 @@ fun ModelRunScreen(
                                                                 )
                                                             }
                                                             if (model.runOnCpu) {
-                                                                Column {
+                                                                Column(
+                                                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                                                ) {
                                                                     Text(
                                                                         stringResource(
                                                                             R.string.image_size,
@@ -1051,7 +1083,7 @@ fun ModelRunScreen(
                                                                         Row(
                                                                             modifier = Modifier.fillMaxWidth(),
                                                                             horizontalArrangement = Arrangement.spacedBy(
-                                                                                8.dp
+                                                                                4.dp
                                                                             )
                                                                         ) {
                                                                             listOf(
@@ -1066,16 +1098,16 @@ fun ModelRunScreen(
                                                                                         saveAllFields()
                                                                                     },
                                                                                     label = { Text("${sizeOption}px") },
-                                                                                    modifier = Modifier.weight(
-                                                                                        1f
-                                                                                    )
+                                                                                    modifier = Modifier
+                                                                                        .weight(1f)
+                                                                                        .height(32.dp)
                                                                                 )
                                                                             }
                                                                         }
                                                                         Row(
                                                                             modifier = Modifier.fillMaxWidth(),
                                                                             horizontalArrangement = Arrangement.spacedBy(
-                                                                                8.dp
+                                                                                4.dp
                                                                             )
                                                                         ) {
                                                                             listOf(
@@ -1090,13 +1122,47 @@ fun ModelRunScreen(
                                                                                         saveAllFields()
                                                                                     },
                                                                                     label = { Text("${sizeOption}px") },
-                                                                                    modifier = Modifier.weight(
-                                                                                        1f
-                                                                                    )
+                                                                                    modifier = Modifier
+                                                                                        .weight(1f)
+                                                                                        .height(32.dp)
                                                                                 )
                                                                             }
                                                                         }
                                                                     }
+                                                                }
+                                                            }
+                                                            if (model.runOnCpu) {
+                                                                Row(
+                                                                    modifier = Modifier.fillMaxWidth(),
+                                                                    verticalAlignment = Alignment.CenterVertically,
+                                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                                ) {
+                                                                    Text(
+                                                                        "Runtime",
+                                                                        style = MaterialTheme.typography.bodyMedium
+                                                                    )
+                                                                    FilterChip(
+                                                                        selected = !useOpenCL,
+                                                                        onClick = { 
+                                                                            useOpenCL = false
+                                                                            saveAllFields()
+                                                                        },
+                                                                        label = { Text("CPU") },
+                                                                        modifier = Modifier.weight(1f)
+                                                                    )
+                                                                    FilterChip(
+                                                                        selected = useOpenCL,
+                                                                        onClick = { 
+                                                                            if (!useOpenCL) {
+                                                                                showOpenCLWarningDialog = true
+                                                                            } else {
+                                                                                useOpenCL = false
+                                                                                saveAllFields()
+                                                                            }
+                                                                        },
+                                                                        label = { Text("GPU") },
+                                                                        modifier = Modifier.weight(1f)
+                                                                    )
                                                                 }
                                                             }
                                                             if (useImg2img) {
@@ -1309,7 +1375,8 @@ fun ModelRunScreen(
                                                     size = size,
                                                     runOnCpu = model.runOnCpu,
                                                     denoiseStrength = denoiseStrength,
-                                                    inputImage = null
+                                                    inputImage = null,
+                                                    useOpenCL = useOpenCL
                                                 )
 
                                                 val intent = Intent(
@@ -1324,6 +1391,7 @@ fun ModelRunScreen(
                                                         ?.let { putExtra("seed", it) }
                                                     putExtra("size", size)
                                                     putExtra("denoise_strength", denoiseStrength)
+                                                    putExtra("use_opencl", useOpenCL)
 
                                                     if (selectedImageUri != null && base64EncodeDone) {
                                                         putExtra("has_image", true)
@@ -1776,7 +1844,9 @@ fun ModelRunScreen(
                                                                 R.string.result_params_2,
                                                                 params.size,
                                                                 params.generationTime ?: "unknown",
-                                                                if (params.runOnCpu) "CPU" else "NPU"
+                                                                if (params.runOnCpu) {
+                                                                    if (params.useOpenCL) "GPU" else "CPU"
+                                                                } else "NPU"
                                                             ),
                                                             style = MaterialTheme.typography.bodySmall,
                                                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(
@@ -1891,7 +1961,9 @@ fun ModelRunScreen(
                                                     Text(
                                                         stringResource(
                                                             R.string.basic_runtime,
-                                                            if (generationParams?.runOnCpu == true) "CPU" else "NPU"
+                                                            if (generationParams?.runOnCpu == true) {
+                                                                if (generationParams?.useOpenCL == true) "GPU" else "CPU"
+                                                            } else "NPU"
                                                         ),
                                                         style = MaterialTheme.typography.bodyMedium
                                                     )

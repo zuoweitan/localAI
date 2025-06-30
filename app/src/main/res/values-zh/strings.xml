@@ -113,6 +113,7 @@
     <string name="basic_seed">种子: %s</string>
     <string name="basic_runtime">运行: %s</string>
     <string name="basic_time">耗时: %s</string>
+    <string name="opencl_warning">GPU运行时警告：每个分辨率的首次运行会比较慢，这会生成缓存文件。后续运行会快一些。</string>
 
     <!-- Error Messages -->
     <string name="error_device_not_supported">您的设备暂不支持，请使用CPU版本</string>

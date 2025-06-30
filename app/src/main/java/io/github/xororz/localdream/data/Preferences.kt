@@ -22,6 +22,7 @@ class GenerationPreferences(private val context: Context) {
     private fun getSizeKey(modelId: String) = intPreferencesKey("${modelId}_size")
     private fun getDenoiseStrengthKey(modelId: String) =
         floatPreferencesKey("${modelId}_denoise_strength")
+    private fun getUseOpenCLKey(modelId: String) = booleanPreferencesKey("${modelId}_use_opencl")
 
     private val BASE_URL_KEY = stringPreferencesKey("base_url")
 
@@ -46,7 +47,8 @@ class GenerationPreferences(private val context: Context) {
         cfg: Float,
         seed: String,
         size: Int,
-        denoiseStrength: Float
+        denoiseStrength: Float,
+        useOpenCL: Boolean
     ) {
         context.dataStore.edit { preferences ->
             preferences[getPromptKey(modelId)] = prompt
@@ -56,6 +58,7 @@ class GenerationPreferences(private val context: Context) {
             preferences[getSeedKey(modelId)] = seed
             preferences[getSizeKey(modelId)] = size
             preferences[getDenoiseStrengthKey(modelId)] = denoiseStrength
+            preferences[getUseOpenCLKey(modelId)] = useOpenCL
         }
     }
     suspend fun savePrompt(modelId: String, prompt: String) {
@@ -100,6 +103,12 @@ class GenerationPreferences(private val context: Context) {
         }
     }
 
+    suspend fun saveUseOpenCL(modelId: String, useOpenCL: Boolean) {
+        context.dataStore.edit { preferences ->
+            preferences[getUseOpenCLKey(modelId)] = useOpenCL
+        }
+    }
+
     fun getPreferences(modelId: String): Flow<GenerationPrefs> {
         return context.dataStore.data
             .catch { exception ->
@@ -117,7 +126,8 @@ class GenerationPreferences(private val context: Context) {
                     cfg = preferences[getCfgKey(modelId)] ?: 7f,
                     seed = preferences[getSeedKey(modelId)] ?: "",
                     size = preferences[getSizeKey(modelId)] ?: 256,
-                    denoiseStrength = preferences[getDenoiseStrengthKey(modelId)] ?: 0.6f
+                    denoiseStrength = preferences[getDenoiseStrengthKey(modelId)] ?: 0.6f,
+                    useOpenCL = preferences[getUseOpenCLKey(modelId)] ?: false
                 )
             }
     }
@@ -130,5 +140,6 @@ data class GenerationPrefs(
     val cfg: Float = 7f,
     val seed: String = "",
     val size: Int = 512,
-    val denoiseStrength: Float = 0.6f
+    val denoiseStrength: Float = 0.6f,
+    val useOpenCL: Boolean = false
 )
