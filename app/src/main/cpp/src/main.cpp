@@ -55,7 +55,7 @@ bool use_safety_checker = false;
 bool use_mnn_clip = false;
 float nsfw_threshold = 0.5f;
 std::string clipPath, unetPath, vaeDecoderPath, vaeEncoderPath,
-    safetyCheckerPath, tokenizerPath, patchPath;
+    safetyCheckerPath, tokenizerPath, patchPath, modelDir;
 int resolution = 512;
 std::shared_ptr<tokenizers::Tokenizer> tokenizer;
 std::unique_ptr<QnnModel> clipApp = nullptr;
@@ -86,6 +86,7 @@ std::vector<float> mask_data_full;
 float denoise_strength;
 bool request_img2img;
 bool request_has_mask;
+bool use_opencl;
 
 namespace qnn {
 namespace tools {
@@ -341,6 +342,7 @@ void processCommandLine(int argc, char **argv) {
         break;
       case OPT_CLIP:
         clipPath = pal::g_optArg;
+        modelDir = std::filesystem::path(clipPath).parent_path().string();
         break;
       case OPT_UNET:
         unetPath = pal::g_optArg;
@@ -789,10 +791,19 @@ GenerationResult generateImage(
             throw std::runtime_error("Failed MNN VAE Enc create");
 
           MNN::ScheduleConfig cfg_vae_enc;
-          cfg_vae_enc.type = MNN_FORWARD_CPU;
-          cfg_vae_enc.numThread = 4;
           MNN::BackendConfig bkCfg_vae_enc;
-          bkCfg_vae_enc.memory = MNN::BackendConfig::Memory_Low;
+          if (use_opencl) {
+            auto cache_file =
+                modelDir + "/vae_enc_cache.mnnc." + std::to_string(output_size);
+            currentVaeEncoderInterpreter->setCacheFile(cache_file.c_str());
+            cfg_vae_enc.type = MNN_FORWARD_OPENCL;
+            cfg_vae_enc.mode = MNN_GPU_MEMORY_BUFFER | MNN_GPU_TUNING_FAST;
+            bkCfg_vae_enc.precision = MNN::BackendConfig::Precision_Low;
+          } else {
+            cfg_vae_enc.type = MNN_FORWARD_CPU;
+            cfg_vae_enc.numThread = 4;
+            bkCfg_vae_enc.memory = MNN::BackendConfig::Memory_Low;
+          }
           bkCfg_vae_enc.power = MNN::BackendConfig::Power_High;
           cfg_vae_enc.backendConfig = &bkCfg_vae_enc;
 
@@ -806,20 +817,34 @@ GenerationResult generateImage(
           currentVaeEncoderInterpreter->resizeTensor(
               input, {1, 3, output_size, output_size});
           currentVaeEncoderInterpreter->resizeSession(currentVaeEncSession);
+          if (use_opencl) {
+            currentVaeEncoderInterpreter->updateCacheFile(currentVaeEncSession);
+          }
           currentVaeEncoderInterpreter->releaseModel();
 
-          memcpy(input->host<float>(), img_data.data(),
-                 img_data.size() * sizeof(float));
-          currentVaeEncoderInterpreter->runSession(currentVaeEncSession);
-
+          auto input_nchw_tensor = new MNN::Tensor(input, MNN::Tensor::CAFFE);
           auto mean_t = currentVaeEncoderInterpreter->getSessionOutput(
               currentVaeEncSession, "mean");
           auto std_t = currentVaeEncoderInterpreter->getSessionOutput(
               currentVaeEncSession, "std");
-          memcpy(vae_enc_mean.data(), mean_t->host<float>(),
+          auto mean_nchw_tensor = new MNN::Tensor(mean_t, MNN::Tensor::CAFFE);
+          auto std_nchw_tensor = new MNN::Tensor(std_t, MNN::Tensor::CAFFE);
+
+          memcpy(input_nchw_tensor->host<float>(), img_data.data(),
+                 img_data.size() * sizeof(float));
+          input->copyFromHostTensor(input_nchw_tensor);
+          currentVaeEncoderInterpreter->runSession(currentVaeEncSession);
+
+          mean_t->copyToHostTensor(mean_nchw_tensor);
+          std_t->copyToHostTensor(std_nchw_tensor);
+          memcpy(vae_enc_mean.data(), mean_nchw_tensor->host<float>(),
                  vae_enc_mean.size() * sizeof(float));
-          memcpy(vae_enc_std.data(), std_t->host<float>(),
+          memcpy(vae_enc_std.data(), std_nchw_tensor->host<float>(),
                  vae_enc_std.size() * sizeof(float));
+
+          delete input_nchw_tensor;
+          delete mean_nchw_tensor;
+          delete std_nchw_tensor;
 
           currentVaeEncoderInterpreter->releaseSession(currentVaeEncSession);
           delete currentVaeEncoderInterpreter;
@@ -972,10 +997,19 @@ GenerationResult generateImage(
             "Failed to create temporary MNN UNET interpreter!");
 
       MNN::ScheduleConfig cfg_unet;
-      cfg_unet.type = MNN_FORWARD_CPU;
-      cfg_unet.numThread = 4;
       MNN::BackendConfig bkCfg_unet;
-      bkCfg_unet.memory = MNN::BackendConfig::Memory_Low;
+      if (use_opencl) {
+        auto cache_file =
+            modelDir + "/unet_cache.mnnc." + std::to_string(output_size);
+        currentUnetInterpreter->setCacheFile(cache_file.c_str());
+        cfg_unet.type = MNN_FORWARD_OPENCL;
+        cfg_unet.mode = MNN_GPU_MEMORY_BUFFER | MNN_GPU_TUNING_FAST;
+        bkCfg_unet.precision = MNN::BackendConfig::Precision_Low;
+      } else {
+        cfg_unet.type = MNN_FORWARD_CPU;
+        cfg_unet.numThread = 4;
+        bkCfg_unet.memory = MNN::BackendConfig::Memory_Low;
+      }
       bkCfg_unet.power = MNN::BackendConfig::Power_High;
       cfg_unet.backendConfig = &bkCfg_unet;
 
@@ -991,10 +1025,15 @@ GenerationResult generateImage(
       auto enc = currentUnetInterpreter->getSessionInput(
           currentUnetSession, "encoder_hidden_states");
 
-      currentUnetInterpreter->resizeTensor(samp, shape);
+      currentUnetInterpreter->resizeTensor(
+          samp, {batch_size, 4, sample_size, sample_size});
       currentUnetInterpreter->resizeTensor(ts, {1});
-      currentUnetInterpreter->resizeTensor(enc, {1, 77, text_embedding_size});
+      currentUnetInterpreter->resizeTensor(
+          enc, {batch_size, 77, text_embedding_size});
       currentUnetInterpreter->resizeSession(currentUnetSession);
+      if (use_opencl) {
+        currentUnetInterpreter->updateCacheFile(currentUnetSession);
+      }
 
       currentUnetInterpreter->releaseModel();
     }
@@ -1020,34 +1059,33 @@ GenerationResult generateImage(
 
         int current_ts_int = (int)(current_ts);
 
-        memcpy(samp->host<float>(), latents_in_vec.data(),
-               latents_in_vec.size() / 2 * sizeof(float));
-        memcpy(ts->host<int>(), &current_ts_int, sizeof(int));
-        memcpy(enc->host<float>(), text_embedding_float.data(),
-               text_embedding_float.size() / 2 * sizeof(float));
+        auto samp_nchw_tensor = new MNN::Tensor(samp, MNN::Tensor::CAFFE);
+        auto ts_nchw_tensor = new MNN::Tensor(ts, MNN::Tensor::CAFFE);
+        auto enc_nchw_tensor = new MNN::Tensor(enc, MNN::Tensor::CAFFE);
 
+        // Copy both batches (negative and positive) at once
+        memcpy(samp_nchw_tensor->host<float>(), latents_in_vec.data(),
+               latents_in_vec.size() * sizeof(float));
+        memcpy(ts_nchw_tensor->host<int>(), &current_ts_int, sizeof(int));
+        memcpy(enc_nchw_tensor->host<float>(), text_embedding_float.data(),
+               text_embedding_float.size() * sizeof(float));
+
+        samp->copyFromHostTensor(samp_nchw_tensor);
+        ts->copyFromHostTensor(ts_nchw_tensor);
+        enc->copyFromHostTensor(enc_nchw_tensor);
+
+        // Single batch inference for both negative and positive conditions
         currentUnetInterpreter->runSession(currentUnetSession);
 
         auto output = currentUnetInterpreter->getSessionOutput(
             currentUnetSession, "out_sample");
-        memcpy(unet_out_latents.data(), output->host<float>(),
-               unet_out_latents.size() / 2 * sizeof(float));
+        output->copyToHostTensor(samp_nchw_tensor);
+        memcpy(unet_out_latents.data(), samp_nchw_tensor->host<float>(),
+               unet_out_latents.size() * sizeof(float));
 
-        memcpy(samp->host<float>(),
-               latents_in_vec.data() + latents_in_vec.size() / 2,
-               latents_in_vec.size() / 2 * sizeof(float));
-        memcpy(ts->host<int>(), &current_ts_int, sizeof(int));
-        memcpy(enc->host<float>(),
-               text_embedding_float.data() + text_embedding_float.size() / 2,
-               text_embedding_float.size() / 2 * sizeof(float));
-
-        currentUnetInterpreter->runSession(currentUnetSession);
-
-        output = currentUnetInterpreter->getSessionOutput(currentUnetSession,
-                                                          "out_sample");
-        memcpy(unet_out_latents.data() + unet_out_latents.size() / 2,
-               output->host<float>(),
-               unet_out_latents.size() / 2 * sizeof(float));
+        delete samp_nchw_tensor;
+        delete ts_nchw_tensor;
+        delete enc_nchw_tensor;
       } else {
         if (!unetApp)
           throw std::runtime_error("Global unetApp not initialized!");
@@ -1129,10 +1167,19 @@ GenerationResult generateImage(
               "Failed to create temporary MNN VAE Decoder interpreter!");
 
         MNN::ScheduleConfig cfg_vae;
-        cfg_vae.type = MNN_FORWARD_CPU;
-        cfg_vae.numThread = 4;
         MNN::BackendConfig bkCfg_vae;
-        bkCfg_vae.memory = MNN::BackendConfig::Memory_Low;
+        if (use_opencl) {
+          auto cache_file =
+              modelDir + "/vae_dec_cache.mnnc." + std::to_string(output_size);
+          currentVaeDecoderInterpreter->setCacheFile(cache_file.c_str());
+          cfg_vae.type = MNN_FORWARD_OPENCL;
+          cfg_vae.mode = MNN_GPU_MEMORY_BUFFER | MNN_GPU_TUNING_FAST;
+          bkCfg_vae.precision = MNN::BackendConfig::Precision_Low;
+        } else {
+          cfg_vae.type = MNN_FORWARD_CPU;
+          cfg_vae.numThread = 4;
+          bkCfg_vae.memory = MNN::BackendConfig::Memory_Low;
+        }
         bkCfg_vae.power = MNN::BackendConfig::Power_High;
         cfg_vae.backendConfig = &bkCfg_vae;
 
@@ -1148,19 +1195,29 @@ GenerationResult generateImage(
         currentVaeDecoderInterpreter->resizeTensor(
             input, {1, 4, sample_size, sample_size});
         currentVaeDecoderInterpreter->resizeSession(currentVaeDecSession);
+        if (use_opencl) {
+          currentVaeDecoderInterpreter->updateCacheFile(currentVaeDecSession);
+        }
 
         currentVaeDecoderInterpreter->releaseModel();
 
-        memcpy(input->host<float>(), vae_dec_in_vec.data(),
+        auto input_nchw_tensor = new MNN::Tensor(input, MNN::Tensor::CAFFE);
+        auto output = currentVaeDecoderInterpreter->getSessionOutput(
+            currentVaeDecSession, "sample");
+        auto output_nchw_tensor = new MNN::Tensor(output, MNN::Tensor::CAFFE);
+
+        memcpy(input_nchw_tensor->host<float>(), vae_dec_in_vec.data(),
                vae_dec_in_vec.size() * sizeof(float));
+        input->copyFromHostTensor(input_nchw_tensor);
 
         currentVaeDecoderInterpreter->runSession(currentVaeDecSession);
 
-        auto output = currentVaeDecoderInterpreter->getSessionOutput(
-            currentVaeDecSession, "sample");
-
-        memcpy(vae_dec_out_pixels.data(), output->host<float>(),
+        output->copyToHostTensor(output_nchw_tensor);
+        memcpy(vae_dec_out_pixels.data(), output_nchw_tensor->host<float>(),
                vae_dec_out_pixels.size() * sizeof(float));
+
+        delete input_nchw_tensor;
+        delete output_nchw_tensor;
 
         currentVaeDecoderInterpreter->releaseSession(currentVaeDecSession);
         delete currentVaeDecoderInterpreter;
@@ -1438,6 +1495,7 @@ int main(int argc, char **argv) {
       negative_prompt = json.value("negative_prompt", "");
       steps = json.value("steps", 20);
       cfg = json.value("cfg", 7.5f);
+      use_opencl = json.value("use_opencl", false);
       seed = json.value(
           "seed",
           (unsigned)hashSeed(
