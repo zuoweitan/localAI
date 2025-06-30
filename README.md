@@ -1,8 +1,13 @@
-# Local Dream <span><img src="./assets/icon.png" width="28"></span>
+<div align="center">
 
-Android Stable Diffusion with Snapdragon NPU acceleration. Also supports CPU inference.
+# Local Dream <img src="./assets/icon.png" width="32" alt="Local Dream">
 
-![](./assets/demo1.jpg)
+**Android Stable Diffusion with Snapdragon NPU acceleration**  
+_Also supports CPU/GPU inference_
+
+<img src="./assets/demo1.jpg" alt="App Demo" width="600">
+
+</div>
 
 ## About this Repo
 
@@ -10,152 +15,195 @@ This project is **now open sourced and completely free**. Hope you enjoy it!
 
 If you like it, please consider [sponsor](https://github.com/xororz/local-dream?tab=readme-ov-file#sponsorship) this project.
 
-## Usage
+## 🚀 Quick Start
 
-- Download the APK from the [Releases](https://github.com/xororz/local-dream/releases) page or [Google Play](https://play.google.com/store/apps/details?id=io.github.xororz.localdream).
-- Open the app and download the model(s) you want to use
+1. **Download**: Get the APK from [Releases](https://github.com/xororz/local-dream/releases) or [Google Play](https://play.google.com/store/apps/details?id=io.github.xororz.localdream)(NSFW filtered)
+2. **Install**: Install the APK on your Android device
+3. **Select Models**: Open the app and download the model(s) you want to use
 
-## Features
+## ✨ Features
 
-- txt2img
-- img2img
-- inpaint
+- 🎨 **txt2img** - Generate images from text descriptions
+- 🖼️ **img2img** - Transform existing images
+- 🎭 **inpaint** - Redraw selected areas of images
 
-![](./assets/demo2.jpg)
+<div align="center">
+<img src="./assets/demo2.jpg" alt="Feature Demo" width="500">
+</div>
 
-## Build
+## 🔧 Build Instructions
 
-It is recommended to build it on linux/wsl. Other platforms are not verified.
+> **Note**: Building on Linux/WSL is recommended. Other platforms are not verified.
 
-**Rust, ninja, and cmake are needed for building. You should first install rustup, then "rustup default stable", and then "rustup target add aarch64-linux-android".**
+### Prerequisites
 
-### Clone this repo recursively
+The following tools are required for building:
+
+- **Rust** - Install [rustup](https://rustup.rs/), then run:
+  ```bash
+  rustup default stable
+  rustup target add aarch64-linux-android
+  ```
+- **Ninja** - Build system
+- **CMake** - Build configuration
+
+### 1. Clone Repository
 
 ```bash
 git clone --recursive https://github.com/xororz/local-dream.git
 ```
 
-### Prepare SDKs
+### 2. Prepare SDKs
 
-1. Download [QNN_SDK_2.29](https://apigwx-aws.qualcomm.com/qsc/public/v1/api/download/software/qualcomm_neural_processing_sdk/v2.29.0.241129.zip) and extract
-2. Download [Android NDK](https://developer.android.com/ndk/downloads) and extract
-3. Modify the QNN_SDK_ROOT in app/src/main/cpp/CMakeLists.txt
-4. Modify the ANDROID_NDK_ROOT in app/src/main/cpp/CMakePresets.json
+1. **Download QNN SDK**: Get [QNN_SDK_2.29](https://apigwx-aws.qualcomm.com/qsc/public/v1/api/download/software/qualcomm_neural_processing_sdk/v2.29.0.241129.zip) and extract
+2. **Download Android NDK**: Get [Android NDK](https://developer.android.com/ndk/downloads) and extract
+3. **Configure paths**:
+   - Update `QNN_SDK_ROOT` in `app/src/main/cpp/CMakeLists.txt`
+   - Update `ANDROID_NDK_ROOT` in `app/src/main/cpp/CMakePresets.json`
 
-### Build and prepare libraries
+### 3. Build Libraries
 
-#### Linux
+<details>
+<summary><strong>🐧 Linux</strong></summary>
 
 ```bash
 cd app/src/main/cpp/
 bash ./build.sh
 ```
 
-#### Windows
+</details>
+
+<details>
+<summary><strong>🪟 Windows</strong></summary>
 
 ```powershell
-# winget install Kitware.CMake (install CMake if you don't have it)
-# winget install Ninja-build.Ninja (install Ninja if you don't have it)
-# winget install Rustlang.Rustup (install Rust if you don't have it)
+# Install dependencies if needed:
+# winget install Kitware.CMake
+# winget install Ninja-build.Ninja
+# winget install Rustlang.Rustup
+
 cd app\src\main\cpp\
-# Convert patch file to Unix format (if you don't have dos2unix, install with: winget install -e --id waterlan.dos2unix)
+
+# Convert patch file (install dos2unix if needed: winget install -e --id waterlan.dos2unix)
 dos2unix SampleApp.patch
 .\build.bat
 ```
 
-#### Mac OS
+</details>
+
+<details>
+<summary><strong>🍎 macOS</strong></summary>
 
 ```bash
-# brew install cmake rust ninja (If you are using homebrew)
-sed -i '' '2s/$/ -DCMAKE_POLICY_VERSION_MINIMUM=3.5/' build.sh # The default version of homebrew is too high
+# Install dependencies with Homebrew:
+# brew install cmake rust ninja
+
+# Fix CMake version compatibility
+sed -i '' '2s/$/ -DCMAKE_POLICY_VERSION_MINIMUM=3.5/' build.sh
 bash ./build.sh
 ```
 
-### Build apk in android studio
+</details>
 
-open this project in android studio and click Build/Generate App Bundles or APKs/Generate APKs
+### 4. Build APK
+
+Open this project in Android Studio and navigate to:
+**Build → Generate App Bundles or APKs → Generate APKs**
 
 ## Technical Implementation
 
 ### NPU Acceleration
 
-- Utilizes Qualcomm QNN SDK to leverage Hexagon NPU
-- W8A16 static quantization for optimal performance
-- Fixed model shape at 512x512
-- Extremely fast inference speed
+- **SDK**: Qualcomm QNN SDK leveraging Hexagon NPU
+- **Quantization**: W8A16 static quantization for optimal performance
+- **Resolution**: Fixed 512×512 model shape
+- **Performance**: Extremely fast inference speed
 
-### CPU Inference
+### CPU/GPU Inference
 
-- Powered by MNN framework
-- W8 dynamic quantization
-- Flexible output sizes: 128x128, 256x256, 384x384, 512x512
-- Relatively slower processing speed with slightly lower accuracy
+- **Framework**: Powered by MNN framework
+- **Quantization**: W8 dynamic quantization
+- **Resolution**: Flexible sizes (128×128, 256×256, 384×384, 512×512)
+- **Performance**: Moderate speed with high compatibility
 
-## Supported Devices
+## NPU High Resolution Support
+
+After downloading a 512 resolution model, you can download patches to enable 768×768 and 1024×1024 image generation. Please note that quantized high-resolution models may produce images with poor layout. We recommend first generating at 512 resolution, then using the high-resolution model for img2img (which is essentially Highres.fix). The suggested img2img denoise_strength is around 0.75.
+
+## Device Compatibility
 
 ### NPU Acceleration Support
 
-- Devices with Snapdragon 8 Gen 1
-- Devices with Snapdragon 8+Gen 1
-- Devices with Snapdragon 8 Gen 2
-- Devices with Snapdragon 8 Gen 3
-- Devices with Snapdragon 8 Elite
+Compatible with devices featuring:
 
-**Other devices are not able to download the npu models.**
+- **Snapdragon 8 Gen 1**
+- **Snapdragon 8+ Gen 1**
+- **Snapdragon 8 Gen 2**
+- **Snapdragon 8 Gen 3**
+- **Snapdragon 8 Elite**
 
-### CPU Support
+> **Note**: Other devices cannot download NPU models
 
-- Requires approximately 2GB RAM
-- Compatible with most Android phones from recent years
+### CPU/GPU Support
+
+- **RAM Requirement**: ~2GB available memory
+- **Compatibility**: Most Android devices from recent years
 
 ## Available Models
 
-| Model                | Type  | CPU | NPU | Clip Skip | Source                                                                           |
-| -------------------- | ----- | --- | --- | --------- | -------------------------------------------------------------------------------- |
-| Anything V5.0        | SD1.5 | ✅  | ✅  | 2         | [Link](https://civitai.com/models/9409?modelVersionId=30163)                     |
-| ChilloutMix          | SD1.5 | ✅  | ✅  | 1         | [Link](https://civitai.com/models/6424/chilloutmix?modelVersionId=11732)         |
-| Absolute Reality     | SD1.5 | ✅  | ✅  | 2         | [Link](https://civitai.com/models/81458?modelVersionId=132760)                   |
-| QteaMix              | SD1.5 | ✅  | ✅  | 2         | [Link](https://civitai.com/models/50696/qteamix-q?modelVersionId=94654)          |
-| CuteYukiMix          | SD1.5 | ✅  | ✅  | 2         | [Link](https://civitai.com/models/28169?modelVersionId=265102)                   |
-| Stable Diffusion 2.1 | SD2.1 | -   | ✅  | 1         | [Link](https://huggingface.co/stabilityai/stable-diffusion-2-1/tree/main)        |
-| Pony V5.5            | SD2.1 | -   | ✅  | 1         | [Link](https://civitai.com/models/95367/pony-diffusion-v5?modelVersionId=205936) |
+<div align="center">
 
-## Seed Settings
+| Model                    | Type  | CPU/GPU | NPU | Clip Skip | Source                                                                              |
+| ------------------------ | ----- | :-----: | :-: | :-------: | ----------------------------------------------------------------------------------- |
+| **Anything V5.0**        | SD1.5 |   ✅    | ✅  |     2     | [CivitAI](https://civitai.com/models/9409?modelVersionId=30163)                     |
+| **ChilloutMix**          | SD1.5 |   ✅    | ✅  |     1     | [CivitAI](https://civitai.com/models/6424/chilloutmix?modelVersionId=11732)         |
+| **Absolute Reality**     | SD1.5 |   ✅    | ✅  |     2     | [CivitAI](https://civitai.com/models/81458?modelVersionId=132760)                   |
+| **QteaMix**              | SD1.5 |   ✅    | ✅  |     2     | [CivitAI](https://civitai.com/models/50696/qteamix-q?modelVersionId=94654)          |
+| **CuteYukiMix**          | SD1.5 |   ✅    | ✅  |     2     | [CivitAI](https://civitai.com/models/28169?modelVersionId=265102)                   |
+| **Stable Diffusion 2.1** | SD2.1 |   ❌    | ✅  |     1     | [HuggingFace](https://huggingface.co/stabilityai/stable-diffusion-2-1/tree/main)    |
+| **Pony V5.5**            | SD2.1 |   ❌    | ✅  |     1     | [CivitAI](https://civitai.com/models/95367/pony-diffusion-v5?modelVersionId=205936) |
 
-The application supports custom seed settings for reproducible results:
+</div>
 
-- CPU Mode: Seeds guarantee identical results across different devices with the same parameters
-- NPU Mode: Seeds ensure consistent results only on devices with identical chipsets
+## 🎲 Seed Settings
 
-## Credits
+Custom seed support for reproducible image generation:
 
-### Cpp
+- **CPU Mode**: Seeds guarantee identical results across different devices with same parameters
+- **GPU Mode**: Results may differ from CPU mode and can vary between different devices
+- **NPU Mode**: Seeds ensure consistent results only on devices with identical chipsets
 
-- [Qualcomm QNN SDK](https://www.qualcomm.com/developer/software/neural-processing-sdk-for-ai), for executing models on NPU
-- [alibaba/MNN](https://github.com/alibaba/MNN/), for executing models on CPU
-- [xtensor-stack](https://github.com/xtensor-stack), for tensor setup and computing, scheduler implementation
-- [mlc-ai/tokenizers-cpp](https://github.com/mlc-ai/tokenizers-cpp), for tokenizing user prompt
-- [yhirose/cpp-httplib](https://github.com/yhirose/cpp-httplib), for http-server
-- [nothings/stb](https://github.com/nothings/stb), for image processing
-- [facebook/zstd](https://github.com/facebook/zstd), for model patching, reducing download size
-- [nlohmann/json](https://github.com/nlohmann/json), for json processing
+## Credits & Acknowledgments
 
-### Android
+### C++ Libraries
 
-- [coil-kt/coil](https://github.com/coil-kt/coil), for image processing
-- [MoyuruAizawa/Cropify](https://github.com/MoyuruAizawa/Cropify), for image cropper
-- AOSP, Material Design, Jetpack Compose and other projects
+- **[Qualcomm QNN SDK](https://www.qualcomm.com/developer/software/neural-processing-sdk-for-ai)** - NPU model execution
+- **[alibaba/MNN](https://github.com/alibaba/MNN/)** - CPU model execution
+- **[xtensor-stack](https://github.com/xtensor-stack)** - Tensor operations & scheduling
+- **[mlc-ai/tokenizers-cpp](https://github.com/mlc-ai/tokenizers-cpp)** - Text tokenization
+- **[yhirose/cpp-httplib](https://github.com/yhirose/cpp-httplib)** - HTTP server
+- **[nothings/stb](https://github.com/nothings/stb)** - Image processing
+- **[facebook/zstd](https://github.com/facebook/zstd)** - Model compression
+- **[nlohmann/json](https://github.com/nlohmann/json)** - JSON processing
 
-## Sponsorship
+### Android Libraries
 
-If you like this project, please consider sponsoring it. Your support will help me implement:
+- **[coil-kt/coil](https://github.com/coil-kt/coil)** - Image loading & processing
+- **[MoyuruAizawa/Cropify](https://github.com/MoyuruAizawa/Cropify)** - Image cropping
+- **AOSP, Material Design, Jetpack Compose** - UI framework
 
-- Additional models
-- New features
-- Enhanced capabilities
+---
 
-<!-- ![Donation Option 1](./assets/donate1.png)
-![Donation Option 2](./assets/donate2.png) -->
+## 💖 Support This Project
+
+If you find Local Dream useful, please consider supporting its development:
+
+### What Your Support Helps With:
+
+- **Additional Models** - More AI model integrations
+- **New Features** - Enhanced functionality and capabilities
+- **Bug Fixes** - Continuous improvement and maintenance
+
 <a href="https://ko-fi.com/xororz">
     <img height="36" style="border:0px;height:36px;" src="https://storage.ko-fi.com/cdn/kofi2.png?v=3" border="0" alt="Buy Me a Coffee at ko-fi.com" />
 </a>
@@ -164,3 +212,5 @@ If you like this project, please consider sponsoring it. Your support will help 
 </a>
 
 Your sponsorship helps maintain and improve Local Dream for everyone!
+
+</div>
