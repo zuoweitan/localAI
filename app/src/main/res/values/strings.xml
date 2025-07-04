@@ -28,7 +28,7 @@
     <string name="delete_confirm">Delete selected %s models? This action cannot be undone.</string>
     <string name="got_it">Got It!</string>
     <string name="about_app">Note</string>
-    <string name="must_read">This APP supports running stable diffusion image generation on CPU and some Qualcomm NPUs.\n\nIf your chip is not one of the following, you can only run it on CPU\n\nSupported NPU list:\n- Snapdragon 8 Gen 1\n- Snapdragon 8 Gen 2\n- Snapdragon 8 Gen 3\n- Snapdragon 8 Elite</string>
+    <string name="must_read">This APP supports running stable diffusion image generation on CPU/GPU and some Qualcomm NPUs.\n\nIf your chip is not one of the following, you can only run it on CPU/GPU\n\nSupported NPU list:\n- Snapdragon 8 Gen 1\n- Snapdragon 8 Gen 2\n- Snapdragon 8 Gen 3\n- Snapdragon 8 Elite</string>
     <string name="help">help</string>
 
     <!-- Model List Screen -->
@@ -123,4 +123,22 @@
     <!-- Info Messages -->
     <string name="image_saved">Image saved to gallery</string>
     <string name="loading_model">Loading model…</string>
+    
+    <!-- File Manager -->
+    <string name="file_manager">File Manager</string>
+    <string name="file_manager_desc">Manage model files</string>
+    <string name="delete_file">Delete File</string>
+    <string name="delete_file_confirm">Are you sure you want to delete the file \"%s\"?</string>
+    <string name="file_deleted">File deleted successfully</string>
+    <string name="no_model_files">No model files found</string>
+    <string name="loading_files">Loading files…</string>
+    <string name="back_to_folders">Back to Folders</string>
+    <string name="model_folder">Model: %s</string>
+    <string name="file_count">%d files</string>
+    
+    <!-- Settings -->
+    <string name="general_settings">General Settings</string>
+    <string name="download_source">Download Source</string>
+    <string name="feature_settings">Feature Settings</string>
+    <string name="file_management">File Management</string>
 </resources>

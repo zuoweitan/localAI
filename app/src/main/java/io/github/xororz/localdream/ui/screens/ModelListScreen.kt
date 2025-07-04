@@ -43,6 +43,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.ui.draw.clip
 import androidx.core.content.edit
+import java.io.File
 
 @Composable
 private fun DeleteConfirmDialog(
@@ -100,6 +101,7 @@ fun ModelListScreen(
         TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
     var showSettingsDialog by remember { mutableStateOf(false) }
+    var showFileManagerDialog by remember { mutableStateOf(false) }
     var tempBaseUrl by remember { mutableStateOf("") }
     val generationPreferences = remember { GenerationPreferences(context) }
     val currentBaseUrl by generationPreferences.getBaseUrl()
@@ -202,56 +204,140 @@ fun ModelListScreen(
             onDismissRequest = { showSettingsDialog = false },
             title = { Text(stringResource(R.string.settings)) },
             text = {
-                Column {
-                    Text(
-                        stringResource(R.string.download_settings_hint),
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-                    OutlinedTextField(
-                        value = tempBaseUrl,
-                        onValueChange = { tempBaseUrl = it },
-                        label = { Text(stringResource(R.string.download_from)) },
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("https://your-mirror-site.com/") },
-                        singleLine = true
-                    )
-
-                    Spacer(modifier = Modifier.height(32.dp))
-                    Text(
-                        stringResource(R.string.img2img_hint),
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = "img2img",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        val preferences = LocalContext.current.getSharedPreferences(
-                            "app_prefs",
-                            Context.MODE_PRIVATE
-                        )
-                        var useImg2img by remember {
-                            mutableStateOf(preferences.getBoolean("use_img2img", true).also {
-                                if (!preferences.contains("use_img2img")) {
-                                    preferences.edit { putBoolean("use_img2img", true) }
-                                }
-                            })
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(24.dp)
+                ) {
+                    // Download source settings section
+                    Column {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.padding(bottom = 12.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CloudDownload,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                stringResource(R.string.download_source),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Medium
+                            )
                         }
-                        Switch(
-                            checked = useImg2img,
-                            onCheckedChange = {
-                                useImg2img = it
-                                preferences.edit {
-                                    putBoolean("use_img2img", it)
-                                }
-                            }
+                        Text(
+                            stringResource(R.string.download_settings_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                            modifier = Modifier.padding(bottom = 12.dp)
                         )
+                        OutlinedTextField(
+                            value = tempBaseUrl,
+                            onValueChange = { tempBaseUrl = it },
+                            label = { Text(stringResource(R.string.download_from)) },
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = { Text("https://your-mirror-site.com/") },
+                            singleLine = true
+                        )
+                    }
+
+                    // Feature settings section
+                    Column {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.padding(bottom = 12.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Tune,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                stringResource(R.string.feature_settings),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(
+                                    text = "img2img",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    stringResource(R.string.img2img_hint),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                )
+                            }
+                            val preferences = LocalContext.current.getSharedPreferences(
+                                "app_prefs",
+                                Context.MODE_PRIVATE
+                            )
+                            var useImg2img by remember {
+                                mutableStateOf(preferences.getBoolean("use_img2img", true).also {
+                                    if (!preferences.contains("use_img2img")) {
+                                        preferences.edit { putBoolean("use_img2img", true) }
+                                    }
+                                })
+                            }
+                            Switch(
+                                checked = useImg2img,
+                                onCheckedChange = {
+                                    useImg2img = it
+                                    preferences.edit {
+                                        putBoolean("use_img2img", it)
+                                    }
+                                }
+                            )
+                        }
+                    }
+
+                    // File management section
+                    Column {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.padding(bottom = 12.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Folder,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                stringResource(R.string.file_management),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                showSettingsDialog = false
+                                showFileManagerDialog = true
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FolderOpen,
+                                contentDescription = null,
+                                modifier = Modifier.padding(end = 8.dp)
+                            )
+                            Text(stringResource(R.string.file_manager))
+                        }
                     }
                 }
             },
@@ -282,6 +368,19 @@ fun ModelListScreen(
         if (showSettingsDialog) {
             tempBaseUrl = currentBaseUrl
         }
+    }
+
+    if (showFileManagerDialog) {
+        FileManagerDialog(
+            context = context,
+            onDismiss = { showFileManagerDialog = false },
+            onFileDeleted = {
+                modelRepository.refreshAllModels()
+                scope.launch {
+                    snackbarHostState.showSnackbar(context.getString(R.string.file_deleted))
+                }
+            }
+        )
     }
     if (showDeleteConfirm && selectedModels.isNotEmpty()) {
         DeleteConfirmDialog(
@@ -1128,4 +1227,296 @@ private fun formatFileSize(size: Long): String {
         size < 1024 * 1024 * 1024 -> "${df.format(size / (1024.0 * 1024.0))}MB"
         else -> "${df.format(size / (1024.0 * 1024.0 * 1024.0))}GB"
     }
+}
+
+@Composable
+private fun FileManagerDialog(
+    context: Context,
+    onDismiss: () -> Unit,
+    onFileDeleted: () -> Unit
+) {
+    var modelFolders by remember { mutableStateOf<List<Pair<String, Int>>>(emptyList()) }
+    var selectedFolder by remember { mutableStateOf<String?>(null) }
+    var folderFiles by remember { mutableStateOf<List<File>>(emptyList()) }
+    var showDeleteConfirm by remember { mutableStateOf<File?>(null) }
+    var isLoading by remember { mutableStateOf(true) }
+
+    fun loadFolders() {
+        val modelsDir = Model.getModelsDir(context)
+        val folders = mutableListOf<Pair<String, Int>>()
+
+        if (modelsDir.exists() && modelsDir.isDirectory) {
+            modelsDir.listFiles()?.forEach { modelDir ->
+                if (modelDir.isDirectory) {
+                    val fileCount = modelDir.listFiles()?.size ?: 0
+                    if (fileCount > 0) {
+                        folders.add(Pair(modelDir.name, fileCount))
+                    }
+                }
+            }
+        }
+        modelFolders = folders
+        isLoading = false
+    }
+
+    fun loadFilesForFolder(folderName: String) {
+        val modelsDir = Model.getModelsDir(context)
+        val folderDir = File(modelsDir, folderName)
+        folderFiles = folderDir.listFiles()?.toList() ?: emptyList()
+    }
+
+    LaunchedEffect(Unit) {
+        loadFolders()
+    }
+
+    if (showDeleteConfirm != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = null },
+            title = { Text(stringResource(R.string.delete_file)) },
+            text = { Text(stringResource(R.string.delete_file_confirm, showDeleteConfirm!!.name)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val fileToDelete = showDeleteConfirm!!
+                        if (fileToDelete.delete()) {
+                            onFileDeleted()
+                            // Reload current folder files
+                            selectedFolder?.let { loadFilesForFolder(it) }
+                            // Reload folder list to update file count
+                            loadFolders()
+                        }
+                        showDeleteConfirm = null
+                    },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text(stringResource(R.string.delete))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        )
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (selectedFolder != null) {
+                    IconButton(
+                        onClick = { selectedFolder = null },
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowBack,
+                            contentDescription = stringResource(R.string.back_to_folders),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+                Text(
+                    text = selectedFolder?.let {
+                        stringResource(R.string.model_folder, it)
+                    } ?: stringResource(R.string.file_manager),
+                    style = MaterialTheme.typography.headlineSmall
+                )
+            }
+        },
+        text = {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(400.dp)
+            ) {
+                if (isLoading) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
+                        Text(
+                            stringResource(R.string.loading_files),
+                            modifier = Modifier.padding(top = 48.dp),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                } else if (selectedFolder == null) {
+                    // Show folder list
+                    if (modelFolders.isEmpty()) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.FolderOpen,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(48.dp),
+                                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text(
+                                    stringResource(R.string.no_model_files),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                )
+                            }
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(modelFolders) { (folderName, fileCount) ->
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .pointerInput(Unit) {
+                                            detectTapGestures(
+                                                onTap = {
+                                                    selectedFolder = folderName
+                                                    loadFilesForFolder(folderName)
+                                                }
+                                            )
+                                        },
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                                    )
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(16.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Folder,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary
+                                            )
+                                            Column {
+                                                Text(
+                                                    text = folderName,
+                                                    style = MaterialTheme.typography.bodyLarge,
+                                                    fontWeight = FontWeight.Medium
+                                                )
+                                                Text(
+                                                    text = stringResource(
+                                                        R.string.file_count,
+                                                        fileCount
+                                                    ),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurface.copy(
+                                                        alpha = 0.6f
+                                                    )
+                                                )
+                                            }
+                                        }
+                                        Icon(
+                                            imageVector = Icons.Default.ChevronRight,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // Show files in selected folder
+                    if (folderFiles.isEmpty()) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                stringResource(R.string.no_model_files),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            )
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(folderFiles) { file ->
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                                    )
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(12.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.InsertDriveFile,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.secondary
+                                            )
+                                            Column {
+                                                Text(
+                                                    text = file.name,
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    fontWeight = FontWeight.Medium
+                                                )
+                                                Text(
+                                                    text = formatFileSize(file.length()),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurface.copy(
+                                                        alpha = 0.6f
+                                                    )
+                                                )
+                                            }
+                                        }
+
+                                        IconButton(
+                                            onClick = { showDeleteConfirm = file },
+                                            colors = IconButtonDefaults.iconButtonColors(
+                                                contentColor = MaterialTheme.colorScheme.error
+                                            )
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Delete,
+                                                contentDescription = stringResource(R.string.delete_file)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.close))
+            }
+        }
+    )
 }

@@ -1064,7 +1064,9 @@ fun ModelRunScreen(
                                                             }
                                                             if (model.runOnCpu) {
                                                                 Column(
-                                                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                                                    verticalArrangement = Arrangement.spacedBy(
+                                                                        4.dp
+                                                                    )
                                                                 ) {
                                                                     Text(
                                                                         stringResource(
@@ -1135,7 +1137,9 @@ fun ModelRunScreen(
                                                                 Row(
                                                                     modifier = Modifier.fillMaxWidth(),
                                                                     verticalAlignment = Alignment.CenterVertically,
-                                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                                    horizontalArrangement = Arrangement.spacedBy(
+                                                                        8.dp
+                                                                    )
                                                                 ) {
                                                                     Text(
                                                                         "Runtime",
@@ -1143,32 +1147,37 @@ fun ModelRunScreen(
                                                                     )
                                                                     FilterChip(
                                                                         selected = !useOpenCL,
-                                                                        onClick = { 
+                                                                        onClick = {
                                                                             useOpenCL = false
                                                                             saveAllFields()
                                                                         },
                                                                         label = { Text("CPU") },
-                                                                        modifier = Modifier.weight(1f)
+                                                                        modifier = Modifier.weight(
+                                                                            1f
+                                                                        )
                                                                     )
                                                                     FilterChip(
                                                                         selected = useOpenCL,
-                                                                        onClick = { 
+                                                                        onClick = {
                                                                             if (!useOpenCL) {
-                                                                                showOpenCLWarningDialog = true
+                                                                                showOpenCLWarningDialog =
+                                                                                    true
                                                                             } else {
                                                                                 useOpenCL = false
                                                                                 saveAllFields()
                                                                             }
                                                                         },
                                                                         label = { Text("GPU") },
-                                                                        modifier = Modifier.weight(1f)
+                                                                        modifier = Modifier.weight(
+                                                                            1f
+                                                                        )
                                                                     )
                                                                 }
                                                             }
                                                             if (useImg2img) {
                                                                 Column {
                                                                     Text(
-                                                                        "(img2img)Denoise Strength: %.2f".format(
+                                                                        "[img2img]Denoise Strength: %.2f".format(
                                                                             denoiseStrength
                                                                         ),
                                                                         style = MaterialTheme.typography.bodyMedium
