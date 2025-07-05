@@ -34,4 +34,10 @@ class FileVerification(private val context: Context) {
                 .forEach { preferences.remove(it) }
         }
     }
+
+    suspend fun clearFileVerification(modelId: String, fileName: String) {
+        context.fileVerificationStore.edit { preferences ->
+            preferences.remove(getFileSizeKey(modelId, fileName))
+        }
+    }
 }

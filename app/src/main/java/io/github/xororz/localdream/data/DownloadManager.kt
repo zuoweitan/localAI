@@ -32,44 +32,68 @@ class DownloadManager(context: Context) {
             android.util.Log.d("DownloadManager", "Processing file: ${file.name}")
 
             var downloadedBytes = if (destFile.exists()) destFile.length() else 0L
-            val randomAccessFile = RandomAccessFile(destFile, "rw")
 
             try {
-                if (downloadedBytes > 0) {
-                    randomAccessFile.seek(downloadedBytes)
-                }
-
-                val request = Request.Builder()
-                    .url(fileUrl)
-                    .apply {
-                        if (downloadedBytes > 0) {
-                            header("Range", "bytes=$downloadedBytes-")
-                        }
+                RandomAccessFile(destFile, "rw").use { randomAccessFile ->
+                    if (downloadedBytes > 0) {
+                        randomAccessFile.seek(downloadedBytes)
                     }
-                    .build()
 
-                client.newCall(request).execute().use { response ->
-                    when {
-                        response.code == 416 -> {
-                            val savedSize = fileVerification.getFileSize(modelId, file.name)
-                            if (savedSize != null && destFile.length() == savedSize) {
-                                randomAccessFile.close()
-                                return@forEachIndexed
-                            } else {
-                                randomAccessFile.close()
-                                destFile.delete()
-                                downloadedBytes = 0L
-                                val newRequest = Request.Builder()
-                                    .url(fileUrl)
-                                    .build()
-                                val newResponse = client.newCall(newRequest).execute()
-                                if (!newResponse.isSuccessful) {
-                                    throw IOException("Download failed with code: ${newResponse.code}")
+                    val request = Request.Builder()
+                        .url(fileUrl)
+                        .apply {
+                            if (downloadedBytes > 0) {
+                                header("Range", "bytes=$downloadedBytes-")
+                            }
+                        }
+                        .build()
+
+                    client.newCall(request).execute().use { response ->
+                        when {
+                            response.code == 416 -> {
+                                val savedSize = fileVerification.getFileSize(modelId, file.name)
+                                if (savedSize != null && destFile.length() == savedSize) {
+                                    return@forEachIndexed
+                                } else {
+                                    destFile.delete()
+                                    fileVerification.clearFileVerification(modelId, file.name)
+                                    downloadedBytes = 0L
+                                    val newRequest = Request.Builder()
+                                        .url(fileUrl)
+                                        .build()
+                                    val newResponse = client.newCall(newRequest).execute()
+                                    if (!newResponse.isSuccessful) {
+                                        throw IOException("Download failed with code: ${newResponse.code}")
+                                    }
+                                    newResponse.use { resp ->
+                                        RandomAccessFile(
+                                            destFile,
+                                            "rw"
+                                        ).use { newRandomAccessFile ->
+                                            handleResponse(
+                                                resp,
+                                                newRandomAccessFile,
+                                                0L,
+                                                file,
+                                                i,
+                                                files.size
+                                            ) { progress ->
+                                                emit(progress)
+                                            }
+                                        }
+                                    }
                                 }
+                            }
+
+                            !response.isSuccessful -> {
+                                throw IOException("Download failed with code: ${response.code}")
+                            }
+
+                            else -> {
                                 handleResponse(
-                                    newResponse,
-                                    RandomAccessFile(destFile, "rw"),
-                                    0L,
+                                    response,
+                                    randomAccessFile,
+                                    downloadedBytes,
                                     file,
                                     i,
                                     files.size
@@ -78,35 +102,16 @@ class DownloadManager(context: Context) {
                                 }
                             }
                         }
-
-                        !response.isSuccessful -> {
-                            throw IOException("Download failed with code: ${response.code}")
-                        }
-
-                        else -> {
-                            handleResponse(
-                                response,
-                                randomAccessFile,
-                                downloadedBytes,
-                                file,
-                                i,
-                                files.size
-                            ) { progress ->
-                                emit(progress)
-                            }
-                        }
                     }
+
+                    // save file size
+                    val finalSize = destFile.length()
+                    fileVerification.saveFileSize(modelId, file.name, finalSize)
                 }
-
-                // save file size
-                val finalSize = destFile.length()
-                fileVerification.saveFileSize(modelId, file.name, finalSize)
-
-                randomAccessFile.close()
             } catch (e: Exception) {
                 android.util.Log.e("DownloadManager", "Download failed for ${file.name}", e)
-                randomAccessFile.close()
                 destFile.delete()
+                fileVerification.clearFileVerification(modelId, file.name)
                 throw e
             }
         }

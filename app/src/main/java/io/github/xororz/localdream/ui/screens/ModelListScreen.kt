@@ -1240,6 +1240,8 @@ private fun FileManagerDialog(
     var folderFiles by remember { mutableStateOf<List<File>>(emptyList()) }
     var showDeleteConfirm by remember { mutableStateOf<File?>(null) }
     var isLoading by remember { mutableStateOf(true) }
+    val fileVerification = remember { FileVerification(context) }
+    val scope = rememberCoroutineScope()
 
     fun loadFolders() {
         val modelsDir = Model.getModelsDir(context)
@@ -1279,6 +1281,14 @@ private fun FileManagerDialog(
                     onClick = {
                         val fileToDelete = showDeleteConfirm!!
                         if (fileToDelete.delete()) {
+                            selectedFolder?.let { modelId ->
+                                scope.launch {
+                                    fileVerification.clearFileVerification(
+                                        modelId,
+                                        fileToDelete.name
+                                    )
+                                }
+                            }
                             onFileDeleted()
                             // Reload current folder files
                             selectedFolder?.let { loadFilesForFolder(it) }

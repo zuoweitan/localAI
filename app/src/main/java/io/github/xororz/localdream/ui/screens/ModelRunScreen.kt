@@ -1919,7 +1919,7 @@ fun ModelRunScreen(
                                         },
                                         dismissButton = {
                                             TextButton(onClick = { showReportDialog = false }) {
-                                                Text(stringResource(R.string.cancel))
+                                                Text("Cancel")
                                             }
                                         }
                                     )
