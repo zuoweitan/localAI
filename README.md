@@ -28,7 +28,7 @@ If you like it, please consider [sponsor](https://github.com/xororz/local-dream?
 - 🎭 **inpaint** - Redraw selected areas of images
 
 <div align="center">
-<img src="./assets/demo2.jpg" alt="Feature Demo" width="500">
+<img src="./assets/demo2.jpg" alt="Feature Demo" width="600">
 </div>
 
 ## 🔧 Build Instructions
@@ -150,6 +150,8 @@ Compatible with devices featuring:
 - **Compatibility**: Most Android devices from recent years
 
 ## Available Models
+
+Now supports importing from local SD1.5 based safetensor for CPU/GPU.
 
 <div align="center">
 
