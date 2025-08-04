@@ -13,6 +13,7 @@
 #include "DPMSolverMultistepScheduler.hpp"
 #include "QnnModel.hpp"
 #include "SDUtils.hpp"
+#include "SafeTensor2MNN.hpp"
 
 // QNN Headers
 #include "BuildId.hpp"
@@ -87,6 +88,10 @@ float denoise_strength;
 bool request_img2img;
 bool request_has_mask;
 bool use_opencl;
+
+bool cvt_model = false;
+std::string model_dir;
+bool clip_skip_2 = false;
 
 namespace qnn {
 namespace tools {
@@ -298,6 +303,8 @@ void processCommandLine(int argc, char **argv) {
     OPT_SAFETY_CHECKER = 27,
     OPT_USE_MNN_CLIP = 28,
     OPT_VAE_ENCODER_ARG = 29,
+    OPT_CONVERT = 30,
+    OPT_CONVERT_CLIP_SKIP_2 = 31,
     OPT_BACKEND = 3,
     OPT_LOG_LEVEL = 10,
     OPT_VERSION = 13,
@@ -316,6 +323,8 @@ void processCommandLine(int argc, char **argv) {
       {"safety_checker", pal::required_argument, NULL, OPT_SAFETY_CHECKER},
       {"use_cpu_clip", pal::no_argument, NULL, OPT_USE_MNN_CLIP},
       {"vae_encoder", pal::required_argument, NULL, OPT_VAE_ENCODER_ARG},
+      {"convert", pal::required_argument, NULL, OPT_CONVERT},
+      {"clip_skip_2", pal::no_argument, NULL, OPT_CONVERT_CLIP_SKIP_2},
       {"tokenizer", pal::required_argument, NULL, OPT_TOKENIZER},
       {"clip", pal::required_argument, NULL, OPT_CLIP},
       {"unet", pal::required_argument, NULL, OPT_UNET},
@@ -372,6 +381,13 @@ void processCommandLine(int argc, char **argv) {
       case OPT_VAE_ENCODER_ARG:
         vaeEncoderPath = pal::g_optArg;
         break;
+      case OPT_CONVERT:
+        cvt_model = true;
+        model_dir = pal::g_optArg;
+        break;
+      case OPT_CONVERT_CLIP_SKIP_2:
+        clip_skip_2 = true;
+        break;
       case OPT_LOG_LEVEL:
         logLevel = sample_app::parseLogLevel(pal::g_optArg);
         if (logLevel != QNN_LOG_LEVEL_MAX) {
@@ -402,6 +418,18 @@ void processCommandLine(int argc, char **argv) {
       default:
         showHelpAndExit("Invalid argument passed.");
     }
+  }
+  if (cvt_model) {
+    if (!std::filesystem::exists(model_dir)) {
+      showHelpAndExit("Model directory does not exist: " + model_dir);
+    }
+    std::string model_name = "model.safetensors";
+    auto model_path = std::filesystem::path(model_dir) / model_name;
+    if (!std::filesystem::exists(model_path)) {
+      showHelpAndExit("Model file does not exist");
+    }
+    generateMNNModels(model_dir, model_name, clip_skip_2);
+    exit(EXIT_SUCCESS);
   }
   if (clipPath.empty() || unetPath.empty() || vaeDecoderPath.empty())
     showHelpAndExit("Missing required model paths");
