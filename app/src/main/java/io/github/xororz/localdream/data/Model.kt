@@ -86,7 +86,8 @@ data class Model(
     val runOnCpu: Boolean = false,
     val useCpuClip: Boolean = false,
     val supportedHighres: List<Int> = emptyList(),
-    val highresInfo: Map<Int, HighresInfo> = emptyMap()
+    val highresInfo: Map<Int, HighresInfo> = emptyMap(),
+    val isCustom: Boolean = false
 
 ) {
     private fun calculateFileMD5(file: File): String? {
@@ -120,6 +121,11 @@ data class Model(
     }
 
     fun download(context: Context): Flow<DownloadResult> = flow {
+        if (isCustom) {
+                        emit(DownloadResult.Success)
+            return@flow
+        }
+        
         val modelsDir = getModelsDir(context)
         val modelDir = File(modelsDir, id).apply {
             if (!exists()) mkdirs()
@@ -277,8 +283,13 @@ data class Model(
         fun checkModelDownloadStatus(
             context: Context,
             modelId: String,
-            files: List<ModelFile>
+            files: List<ModelFile>,
+            isCustom: Boolean = false
         ): Pair<Boolean, Boolean> {
+            if (isCustom) {
+                                return Pair(true, false)
+            }
+            
             val modelDir = File(getModelsDir(context), modelId)
             val fileVerification = FileVerification(context)
 
@@ -303,8 +314,8 @@ data class Model(
             return Pair(fullyDownloaded, partiallyDownloaded)
         }
 
-        fun checkModelExists(context: Context, modelId: String, files: List<ModelFile>): Boolean {
-            val (fullyDownloaded, _) = checkModelDownloadStatus(context, modelId, files)
+        fun checkModelExists(context: Context, modelId: String, files: List<ModelFile>, isCustom: Boolean = false): Boolean {
+            val (fullyDownloaded, _) = checkModelDownloadStatus(context, modelId, files, isCustom)
             return fullyDownloaded
         }
     }
@@ -352,8 +363,68 @@ class ModelRepository(private val context: Context) {
         }
     }
 
+    private fun scanCustomModels(): List<Model> {
+        val modelsDir = Model.getModelsDir(context)
+        val customModels = mutableListOf<Model>()
+        
+        if (modelsDir.exists() && modelsDir.isDirectory) {
+            modelsDir.listFiles()?.forEach { dir ->
+                if (dir.isDirectory) {
+                    val finishedFile = File(dir, "finished")
+                    if (finishedFile.exists()) {
+                                                val customModel = createCustomModel(dir)
+                        customModels.add(customModel)
+                    }
+                }
+            }
+        }
+        
+        return customModels
+    }
+    
+    private fun createCustomModel(modelDir: File): Model {
+        val modelId = modelDir.name
+        val files = mutableListOf<ModelFile>()
+        
+                val commonFiles = listOf(
+            "tokenizer.json" to "tokenizer",
+            "clip.mnn" to "clip", 
+            "unet.mnn" to "unet",
+            "vae_decoder.mnn" to "vae_decoder",
+            "vae_encoder.mnn" to "vae_encoder"
+        )
+        
+        commonFiles.forEach { (fileName, displayName) ->
+            val file = File(modelDir, fileName)
+            if (file.exists()) {
+                files.add(ModelFile(
+                    name = fileName,
+                    displayName = displayName,
+                    uri = ""                 ))
+            }
+        }
+        
+        return Model(
+            id = modelId,
+            name = modelId,
+            description = context.getString(R.string.custom_model),
+            baseUrl = "",
+            files = files,
+            approximateSize = "Custom",
+            isDownloaded = true,
+            isPartiallyDownloaded = false,
+            defaultPrompt = "masterpiece, best quality, flowers,",
+            defaultNegativePrompt = "worst quality, low quality, normal quality, poorly drawn, lowres, low resolution, signature, watermarks, ugly, out of focus, error, blurry, unclear photo, bad photo",
+            runOnCpu = true,
+            useCpuClip = true,
+            isCustom = true
+        )
+    }
+
     private fun initializeModels(): List<Model> {
-        var modelList = listOf(
+                val customModels = scanCustomModels()
+        
+                val predefinedModels = listOf(
             createAnythingV5Model(),
             createAnythingV5ModelCPU(),
             createQteaMixModel(),
@@ -366,7 +437,8 @@ class ModelRepository(private val context: Context) {
             createChilloutMixModel(),
             createSD21Model(),
         )
-        return modelList
+        
+                return customModels + predefinedModels
     }
 
     private fun createAnythingV5Model(): Model {
@@ -403,7 +475,8 @@ class ModelRepository(private val context: Context) {
         val (fullyDownloaded, partiallyDownloaded) = Model.checkModelDownloadStatus(
             context,
             id,
-            files
+            files,
+            false
         )
         val supportedHighres = listOf(768, 1024)
         val highresInfo = supportedHighres.associateWith { resolution ->
@@ -460,7 +533,8 @@ class ModelRepository(private val context: Context) {
         val (fullyDownloaded, partiallyDownloaded) = Model.checkModelDownloadStatus(
             context,
             id,
-            files
+            files,
+            false
         )
 
         return Model(
@@ -512,7 +586,8 @@ class ModelRepository(private val context: Context) {
         val (fullyDownloaded, partiallyDownloaded) = Model.checkModelDownloadStatus(
             context,
             id,
-            files
+            files,
+            false
         )
         val supportedHighres = listOf(768, 1024)
         val highresInfo = supportedHighres.associateWith { resolution ->
@@ -569,7 +644,8 @@ class ModelRepository(private val context: Context) {
         val (fullyDownloaded, partiallyDownloaded) = Model.checkModelDownloadStatus(
             context,
             id,
-            files
+            files,
+            false
         )
 
         return Model(
@@ -621,7 +697,8 @@ class ModelRepository(private val context: Context) {
         val (fullyDownloaded, partiallyDownloaded) = Model.checkModelDownloadStatus(
             context,
             id,
-            files
+            files,
+            false
         )
         val supportedHighres = listOf(768, 1024)
         val highresInfo = supportedHighres.associateWith { resolution ->
@@ -678,7 +755,8 @@ class ModelRepository(private val context: Context) {
         val (fullyDownloaded, partiallyDownloaded) = Model.checkModelDownloadStatus(
             context,
             id,
-            files
+            files,
+            false
         )
 
         return Model(
@@ -726,7 +804,8 @@ class ModelRepository(private val context: Context) {
         val (fullyDownloaded, partiallyDownloaded) = Model.checkModelDownloadStatus(
             context,
             id,
-            files
+            files,
+            false
         )
         val supportedHighres = listOf(768, 1024)
         val highresInfo = supportedHighres.associateWith { resolution ->
@@ -784,7 +863,8 @@ class ModelRepository(private val context: Context) {
         val (fullyDownloaded, partiallyDownloaded) = Model.checkModelDownloadStatus(
             context,
             id,
-            files
+            files,
+            false
         )
 
         return Model(
@@ -832,7 +912,8 @@ class ModelRepository(private val context: Context) {
         val (fullyDownloaded, partiallyDownloaded) = Model.checkModelDownloadStatus(
             context,
             id,
-            files
+            files,
+            false
         )
         val supportedHighres = listOf(768, 1024)
         val highresInfo = supportedHighres.associateWith { resolution ->
@@ -890,7 +971,8 @@ class ModelRepository(private val context: Context) {
         val (fullyDownloaded, partiallyDownloaded) = Model.checkModelDownloadStatus(
             context,
             id,
-            files
+            files,
+            false
         )
 
         return Model(
@@ -938,7 +1020,8 @@ class ModelRepository(private val context: Context) {
         val (fullyDownloaded, partiallyDownloaded) = Model.checkModelDownloadStatus(
             context,
             id,
-            files
+            files,
+            false
         )
 
         return Model(
@@ -962,7 +1045,8 @@ class ModelRepository(private val context: Context) {
                 val (fullyDownloaded, partiallyDownloaded) = Model.checkModelDownloadStatus(
                     context,
                     modelId,
-                    model.files
+                    model.files,
+                    model.isCustom
                 )
                 model.copy(
                     isDownloaded = fullyDownloaded,
@@ -975,16 +1059,6 @@ class ModelRepository(private val context: Context) {
     }
 
     fun refreshAllModels() {
-        models = models.map { model ->
-            val (fullyDownloaded, partiallyDownloaded) = Model.checkModelDownloadStatus(
-                context,
-                model.id,
-                model.files
-            )
-            model.copy(
-                isDownloaded = fullyDownloaded,
-                isPartiallyDownloaded = partiallyDownloaded
-            )
-        }
+                models = initializeModels()
     }
 }

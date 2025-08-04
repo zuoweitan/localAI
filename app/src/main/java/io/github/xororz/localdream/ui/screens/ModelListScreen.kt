@@ -44,6 +44,15 @@ import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.ui.draw.clip
 import androidx.core.content.edit
 import java.io.File
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.net.Uri
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Folder
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
+import androidx.compose.foundation.interaction.MutableInteractionSource
 
 @Composable
 private fun DeleteConfirmDialog(
@@ -102,6 +111,9 @@ fun ModelListScreen(
 
     var showSettingsDialog by remember { mutableStateOf(false) }
     var showFileManagerDialog by remember { mutableStateOf(false) }
+    var showCustomModelDialog by remember { mutableStateOf(false) }
+    var isConverting by remember { mutableStateOf(false) }
+    var conversionProgress by remember { mutableStateOf("") }
     var tempBaseUrl by remember { mutableStateOf("") }
     val generationPreferences = remember { GenerationPreferences(context) }
     val currentBaseUrl by generationPreferences.getBaseUrl()
@@ -382,6 +394,45 @@ fun ModelListScreen(
             }
         )
     }
+        if (showCustomModelDialog) {
+        CustomModelDialog(
+            onDismiss = { showCustomModelDialog = false },
+            onModelAdded = { modelName, fileUri, clipSkip ->                 showCustomModelDialog = false
+                scope.launch {
+                    convertCustomModel(
+                        context = context,
+                        modelName = modelName,
+                        fileUri = fileUri,
+                        clipSkip = clipSkip,                         onProgress = { progress ->
+                            conversionProgress = progress
+                        },
+                        onStart = {
+                            isConverting = true
+                        },
+                        onSuccess = {
+                            isConverting = false
+                            modelRepository.refreshAllModels()
+                            scope.launch {
+                                snackbarHostState.showSnackbar(context.getString(R.string.model_conversion_success))
+                            }
+                        },
+                        onError = { error ->
+                            isConverting = false
+                            scope.launch {
+                                snackbarHostState.showSnackbar(
+                                    context.getString(
+                                        R.string.model_conversion_failed,
+                                        error
+                                    )
+                                )
+                            }
+                        }
+                    )
+                }
+            }
+        )
+    }
+
     if (showDeleteConfirm && selectedModels.isNotEmpty()) {
         DeleteConfirmDialog(
             selectedCount = selectedModels.size,
@@ -663,6 +714,15 @@ fun ModelListScreen(
                     ),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
+                                        if (page == 0) {
+                        item {
+                            AddCustomModelButton(
+                                onClick = { showCustomModelDialog = true },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+
                     items(
                         items = models,
                         key = { model -> "${model.id}_${version}" }
@@ -774,6 +834,33 @@ fun ModelListScreen(
                     pageCount = 2,
                     currentPage = pagerState.currentPage,
                     modifier = Modifier.padding(bottom = 8.dp)
+                )
+            }
+        }
+    }
+
+        if (isConverting) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.8f))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) { },
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                CircularProgressIndicator()
+                Text(
+                    text = if (conversionProgress.isNotEmpty()) conversionProgress else stringResource(
+                        R.string.converting
+                    ),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
         }
@@ -1290,10 +1377,8 @@ private fun FileManagerDialog(
                                 }
                             }
                             onFileDeleted()
-                            // Reload current folder files
-                            selectedFolder?.let { loadFilesForFolder(it) }
-                            // Reload folder list to update file count
-                            loadFolders()
+                                                        selectedFolder?.let { loadFilesForFolder(it) }
+                                                        loadFolders()
                         }
                         showDeleteConfirm = null
                     },
@@ -1358,8 +1443,7 @@ private fun FileManagerDialog(
                         )
                     }
                 } else if (selectedFolder == null) {
-                    // Show folder list
-                    if (modelFolders.isEmpty()) {
+                                        if (modelFolders.isEmpty()) {
                         Box(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
@@ -1447,8 +1531,7 @@ private fun FileManagerDialog(
                         }
                     }
                 } else {
-                    // Show files in selected folder
-                    if (folderFiles.isEmpty()) {
+                                        if (folderFiles.isEmpty()) {
                         Box(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
@@ -1529,4 +1612,346 @@ private fun FileManagerDialog(
             }
         }
     )
+}
+
+@Composable
+fun AddCustomModelButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = { onClick() }
+                )
+            },
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+        ),
+        shape = RoundedCornerShape(20.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.Add,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = stringResource(R.string.add_custom_model),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = FontWeight.Medium
+            )
+        }
+    }
+}
+
+@Composable
+fun CustomModelDialog(
+    onDismiss: () -> Unit,
+    onModelAdded: (String, Uri, Int) -> Unit
+) {
+    var modelName by remember { mutableStateOf("") }
+    var selectedFileUri by remember { mutableStateOf<Uri?>(null) }
+    var clipSkip by remember { mutableStateOf(1) }
+
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        uri?.let {
+            selectedFileUri = it
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = stringResource(R.string.add_custom_model),
+                style = MaterialTheme.typography.headlineSmall
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.custom_model_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                OutlinedTextField(
+                    value = modelName,
+                    onValueChange = { modelName = it },
+                    label = { Text(stringResource(R.string.custom_model_name)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    placeholder = { Text(stringResource(R.string.custom_model_name_hint)) }
+                )
+
+                                Column(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilterChip(
+                            selected = clipSkip == 1,
+                            onClick = { clipSkip = 1 },
+                            label = { Text("Clip Skip 1") },
+                            modifier = Modifier.weight(1f)
+                        )
+                        FilterChip(
+                            selected = clipSkip == 2,
+                            onClick = { clipSkip = 2 },
+                            label = { Text("Clip Skip 2") },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    Text(
+                        text = stringResource(R.string.clip_skip_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+
+                OutlinedButton(
+                    onClick = {
+                        filePickerLauncher.launch("*/*")
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Folder,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = selectedFileUri?.let { stringResource(R.string.file_selected) }
+                            ?: stringResource(R.string.select_model_file)
+                    )
+                }
+
+                selectedFileUri?.let { uri ->
+                    Text(
+                        text = "Selected: ${uri.lastPathSegment ?: "Unknown file"}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    if (modelName.isNotBlank() && selectedFileUri != null) {
+                        onModelAdded(modelName, selectedFileUri!!, clipSkip)                     }
+                },
+                enabled = modelName.isNotBlank() && selectedFileUri != null
+            ) {
+                Text(stringResource(R.string.add_model))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        }
+    )
+}
+
+suspend fun convertCustomModel(
+    context: Context,
+    modelName: String,
+    fileUri: Uri,
+    clipSkip: Int,     onProgress: (String) -> Unit,
+    onStart: () -> Unit,
+    onSuccess: () -> Unit,
+    onError: (String) -> Unit
+) = withContext(Dispatchers.IO) {
+    try {
+        withContext(Dispatchers.Main) {
+            onStart()
+            onProgress(context.getString(R.string.preparing_model))
+        }
+
+                val modelId = modelName.replace(" ", "")
+
+                val modelsDir = File(context.filesDir, "models")
+        if (!modelsDir.exists()) {
+            modelsDir.mkdirs()
+        }
+
+        val modelDir = File(modelsDir, modelId)
+        if (modelDir.exists()) {
+            modelDir.deleteRecursively()
+        }
+        modelDir.mkdirs()
+
+        withContext(Dispatchers.Main) {
+            onProgress(context.getString(R.string.copying_model_file))
+        }
+
+                val inputStream = context.contentResolver.openInputStream(fileUri)
+            ?: throw Exception("Cannot open selected file")
+        val modelFile = File(modelDir, "model.safetensors")
+
+        inputStream.use { input ->
+            modelFile.outputStream().use { output ->
+                input.copyTo(output)
+            }
+        }
+
+        withContext(Dispatchers.Main) {
+            onProgress(context.getString(R.string.copying_base_files))
+        }
+
+                fun copyAssetsRecursively(assetPath: String, targetDir: File) {
+            val assetManager = context.assets
+            val assets = assetManager.list(assetPath) ?: emptyArray()
+
+            if (assets.isEmpty()) {
+                                try {
+                    val assetInputStream = assetManager.open(assetPath)
+                    val fileName = assetPath.substringAfterLast("/")
+                    val targetFile = File(targetDir, fileName)
+
+                    assetInputStream.use { input ->
+                        targetFile.outputStream().use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                } catch (e: Exception) {
+                                        android.util.Log.w("ModelConvert", "Could not copy asset: $assetPath", e)
+                }
+            } else {
+                                for (asset in assets) {
+                    val subAssetPath = "$assetPath/$asset"
+                    val subAssets = assetManager.list(subAssetPath) ?: emptyArray()
+
+                    if (subAssets.isEmpty()) {
+                                                try {
+                            val assetInputStream = assetManager.open(subAssetPath)
+                            val targetFile = File(targetDir, asset)
+
+                            assetInputStream.use { input ->
+                                targetFile.outputStream().use { output ->
+                                    input.copyTo(output)
+                                }
+                            }
+                        } catch (e: Exception) {
+                            android.util.Log.w(
+                                "ModelConvert",
+                                "Could not copy file: $subAssetPath",
+                                e
+                            )
+                        }
+                    } else {
+                                                val subTargetDir = File(targetDir, asset)
+                        subTargetDir.mkdirs()
+                        copyAssetsRecursively(subAssetPath, subTargetDir)
+                    }
+                }
+            }
+        }
+
+        copyAssetsRecursively("cvtbase", modelDir)
+
+        withContext(Dispatchers.Main) {
+            onProgress(context.getString(R.string.converting_model))
+        }
+
+                val nativeDir = context.applicationInfo.nativeLibraryDir
+        val executableFile = File(nativeDir, "libstable_diffusion_core.so")
+
+        if (!executableFile.exists()) {
+            throw Exception("Executable not found: ${executableFile.absolutePath}")
+        }
+
+        var command = listOf(
+            executableFile.absolutePath,
+            "--convert",
+            modelDir.absolutePath
+        )
+        if (clipSkip == 2) {             command += listOf(
+                "--clip_skip_2"
+            )
+        }
+        val env = mutableMapOf<String, String>()
+        val systemLibPaths = listOf(
+            nativeDir,
+            "/system/lib64",
+            "/vendor/lib64",
+            "/vendor/lib64/egl"
+        ).joinToString(":")
+
+        env["LD_LIBRARY_PATH"] = systemLibPaths
+        env["DSP_LIBRARY_PATH"] = nativeDir
+
+        val processBuilder = ProcessBuilder(command).apply {
+            directory(File(nativeDir))
+            redirectErrorStream(true)
+            environment().putAll(env)
+        }
+
+        val process = processBuilder.start()
+
+                process.inputStream.bufferedReader().use { reader ->
+            var line: String?
+            while (reader.readLine().also { line = it } != null) {
+                android.util.Log.i("ModelConvert", "Convert: $line")
+                withContext(Dispatchers.Main) {
+                    onProgress("Converting: $line")
+                }
+            }
+        }
+
+        val exitCode = process.waitFor()
+        android.util.Log.i("ModelConvert", "Conversion process exited with code: $exitCode")
+
+                val finishedFile = File(modelDir, "finished")
+        if (finishedFile.exists()) {
+                        modelFile.delete() 
+                        val clipSlimmedFile = File(modelDir, "clip.mnn.slimmed")
+            if (clipSlimmedFile.exists()) {
+                clipSlimmedFile.delete()
+            }
+
+            withContext(Dispatchers.Main) {
+                onSuccess()
+            }
+        } else {
+                        modelDir.deleteRecursively()
+            withContext(Dispatchers.Main) {
+                onError("Model conversion failed: Please use SD1.5 safetensors model")
+            }
+        }
+
+    } catch (e: Exception) {
+        android.util.Log.e("ModelConvert", "Conversion failed", e)
+
+                val modelId = modelName.replace(" ", "")
+        val modelDir = File(File(context.filesDir, "models"), modelId)
+        if (modelDir.exists()) {
+            modelDir.deleteRecursively()
+        }
+
+        withContext(Dispatchers.Main) {
+            onError("Conversion failed: ${e.message}")
+        }
+    }
 }
