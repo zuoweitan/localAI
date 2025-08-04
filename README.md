@@ -13,7 +13,7 @@ _Also supports CPU/GPU inference_
 
 This project is **now open sourced and completely free**. Hope you enjoy it!
 
-If you like it, please consider [sponsor](https://github.com/xororz/local-dream?tab=readme-ov-file#sponsorship) this project.
+If you like it, please consider [sponsor](https://github.com/xororz/local-dream?tab=readme-ov-file#-support-this-project) this project.
 
 ## 🚀 Quick Start
 
