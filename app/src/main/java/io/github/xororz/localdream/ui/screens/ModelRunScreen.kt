@@ -1063,11 +1063,7 @@ fun ModelRunScreen(
                                                                 )
                                                             }
                                                             if (model.runOnCpu) {
-                                                                Column(
-                                                                    verticalArrangement = Arrangement.spacedBy(
-                                                                        4.dp
-                                                                    )
-                                                                ) {
+                                                                Column {
                                                                     Text(
                                                                         stringResource(
                                                                             R.string.image_size,
@@ -1076,61 +1072,21 @@ fun ModelRunScreen(
                                                                         ),
                                                                         style = MaterialTheme.typography.bodyMedium
                                                                     )
-                                                                    Column(
-                                                                        modifier = Modifier.fillMaxWidth(),
-                                                                        verticalArrangement = Arrangement.spacedBy(
-                                                                            4.dp
-                                                                        )
-                                                                    ) {
-                                                                        Row(
-                                                                            modifier = Modifier.fillMaxWidth(),
-                                                                            horizontalArrangement = Arrangement.spacedBy(
-                                                                                4.dp
-                                                                            )
-                                                                        ) {
-                                                                            listOf(
+                                                                    Slider(
+                                                                        value = size.toFloat(),
+                                                                        onValueChange = { newValue ->
+                                                                            val rounded =
+                                                                                (newValue / 64).roundToInt() * 64
+                                                                            size = rounded.coerceIn(
                                                                                 128,
-                                                                                256
-                                                                            ).forEach { sizeOption ->
-                                                                                FilterChip(
-                                                                                    selected = size == sizeOption,
-                                                                                    onClick = {
-                                                                                        size =
-                                                                                            sizeOption
-                                                                                        saveAllFields()
-                                                                                    },
-                                                                                    label = { Text("${sizeOption}px") },
-                                                                                    modifier = Modifier
-                                                                                        .weight(1f)
-                                                                                        .height(32.dp)
-                                                                                )
-                                                                            }
-                                                                        }
-                                                                        Row(
-                                                                            modifier = Modifier.fillMaxWidth(),
-                                                                            horizontalArrangement = Arrangement.spacedBy(
-                                                                                4.dp
-                                                                            )
-                                                                        ) {
-                                                                            listOf(
-                                                                                384,
                                                                                 512
-                                                                            ).forEach { sizeOption ->
-                                                                                FilterChip(
-                                                                                    selected = size == sizeOption,
-                                                                                    onClick = {
-                                                                                        size =
-                                                                                            sizeOption
-                                                                                        saveAllFields()
-                                                                                    },
-                                                                                    label = { Text("${sizeOption}px") },
-                                                                                    modifier = Modifier
-                                                                                        .weight(1f)
-                                                                                        .height(32.dp)
-                                                                                )
-                                                                            }
-                                                                        }
-                                                                    }
+                                                                            )
+                                                                            saveAllFields()
+                                                                        },
+                                                                        valueRange = 128f..512f,
+                                                                        steps = 5,
+                                                                        modifier = Modifier.fillMaxWidth()
+                                                                    )
                                                                 }
                                                             }
                                                             if (model.runOnCpu) {
