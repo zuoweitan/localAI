@@ -79,10 +79,12 @@ fun InpaintScreen(
     val context = LocalContext.current
     val density = LocalDensity.current
 
-    val sharedPrefs = remember { context.getSharedPreferences("inpaint_prefs", Context.MODE_PRIVATE) }
+    val sharedPrefs =
+        remember { context.getSharedPreferences("inpaint_prefs", Context.MODE_PRIVATE) }
     val defaultColor = android.graphics.Color.WHITE
     val savedColor = remember { sharedPrefs.getInt("brush_color", defaultColor) }
-    val savedToolMode = remember { sharedPrefs.getString("tool_mode", ToolMode.BRUSH.name) ?: ToolMode.BRUSH.name }
+    val savedToolMode =
+        remember { sharedPrefs.getString("tool_mode", ToolMode.BRUSH.name) ?: ToolMode.BRUSH.name }
 
     var brushColor by remember { mutableStateOf(savedColor) }
     var showColorPicker by remember { mutableStateOf(false) }
@@ -205,7 +207,8 @@ fun InpaintScreen(
         if (!rect.contains(canvasPoint)) {
             val tolerance = 5f * density.density
             if (canvasPoint.x < rect.left - tolerance || canvasPoint.x > rect.right + tolerance ||
-                canvasPoint.y < rect.top - tolerance || canvasPoint.y > rect.bottom + tolerance) {
+                canvasPoint.y < rect.top - tolerance || canvasPoint.y > rect.bottom + tolerance
+            ) {
                 return null
             }
         }
@@ -219,7 +222,12 @@ fun InpaintScreen(
         )
     }
 
-    fun convertDpToImagePixels(dpValue: Float, density: Density, imageRect: Rect?, originalWidth: Int): Float {
+    fun convertDpToImagePixels(
+        dpValue: Float,
+        density: Density,
+        imageRect: Rect?,
+        originalWidth: Int
+    ): Float {
         val rect = imageRect ?: return dpValue
 
         val brushSizeInScreenPx = with(density) { dpValue.dp.toPx() }
@@ -276,7 +284,8 @@ fun InpaintScreen(
             canvas.drawPath(androidPath, paint)
         }
 
-        displayMaskBitmap = tempBitmap.copy(tempBitmap.config ?: Bitmap.Config.ARGB_8888, true).asImageBitmap()
+        displayMaskBitmap =
+            tempBitmap.copy(tempBitmap.config ?: Bitmap.Config.ARGB_8888, true).asImageBitmap()
     }
 
     fun processMask() {
@@ -344,7 +353,15 @@ fun InpaintScreen(
 
     BackHandler { onCancel() }
 
-    LaunchedEffect(pathHistory.size, currentPathPoints.size, isDrawing, imageRect, density, displayUpdateTrigger, currentToolMode) {
+    LaunchedEffect(
+        pathHistory.size,
+        currentPathPoints.size,
+        isDrawing,
+        imageRect,
+        density,
+        displayUpdateTrigger,
+        currentToolMode
+    ) {
         updateDisplayMask(density, imageRect)
     }
 
@@ -440,7 +457,8 @@ fun InpaintScreen(
                             val size = coordinates.size
                             val imageWidth = size.width.toFloat()
                             val imageHeight = size.height.toFloat()
-                            val originalAspect = originalBitmap.width.toFloat() / originalBitmap.height.toFloat()
+                            val originalAspect =
+                                originalBitmap.width.toFloat() / originalBitmap.height.toFloat()
                             val boxAspect = imageWidth / imageHeight
                             val scaledWidth: Float
                             val scaledHeight: Float
@@ -453,7 +471,8 @@ fun InpaintScreen(
                             }
                             val left = (imageWidth - scaledWidth) / 2
                             val top = (imageHeight - scaledHeight) / 2
-                            val newRect = Rect(left, top, left + scaledWidth, bottom = top + scaledHeight)
+                            val newRect =
+                                Rect(left, top, left + scaledWidth, bottom = top + scaledHeight)
                             if (newRect != imageRect) {
                                 imageRect = newRect
                             }
@@ -575,7 +594,11 @@ fun InpaintScreen(
                                             modifier = Modifier
                                                 .size(36.dp)
                                                 .clip(CircleShape)
-                                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
+                                                .background(
+                                                    MaterialTheme.colorScheme.primary.copy(
+                                                        alpha = 0.15f
+                                                    )
+                                                )
                                         )
                                     }
 
@@ -604,7 +627,11 @@ fun InpaintScreen(
                                             modifier = Modifier
                                                 .size(36.dp)
                                                 .clip(CircleShape)
-                                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
+                                                .background(
+                                                    MaterialTheme.colorScheme.primary.copy(
+                                                        alpha = 0.15f
+                                                    )
+                                                )
                                         )
                                     }
 
@@ -674,7 +701,10 @@ fun InpaintScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(top = 12.dp),
-                            horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally)
+                            horizontalArrangement = Arrangement.spacedBy(
+                                16.dp,
+                                Alignment.CenterHorizontally
+                            )
                         ) {
                             val currentDensity = LocalDensity.current
                             val currentImageRect = imageRect
@@ -683,7 +713,11 @@ fun InpaintScreen(
                                 onClick = { undoLastPath(currentDensity, currentImageRect) },
                                 enabled = pathHistory.isNotEmpty() && !isLoading
                             ) {
-                                Icon(Icons.Default.Refresh, contentDescription = "Undo", modifier = Modifier.size(ButtonDefaults.IconSize))
+                                Icon(
+                                    Icons.Default.Refresh,
+                                    contentDescription = "Undo",
+                                    modifier = Modifier.size(ButtonDefaults.IconSize)
+                                )
                                 Spacer(modifier = Modifier.width(ButtonDefaults.IconSpacing))
                                 Text(stringResource(R.string.undo))
                             }
@@ -693,7 +727,11 @@ fun InpaintScreen(
                                 enabled = redoStack.isNotEmpty() && !isLoading,
                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
                             ) {
-                                Icon(Icons.Default.Redo, contentDescription = "Redo", modifier = Modifier.size(ButtonDefaults.IconSize))
+                                Icon(
+                                    Icons.Default.Redo,
+                                    contentDescription = "Redo",
+                                    modifier = Modifier.size(ButtonDefaults.IconSize)
+                                )
                                 Spacer(modifier = Modifier.width(ButtonDefaults.IconSpacing))
                                 Text(stringResource(R.string.redo))
                             }

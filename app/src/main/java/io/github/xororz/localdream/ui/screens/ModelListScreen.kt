@@ -394,16 +394,17 @@ fun ModelListScreen(
             }
         )
     }
-        if (showCustomModelDialog) {
+    if (showCustomModelDialog) {
         CustomModelDialog(
             onDismiss = { showCustomModelDialog = false },
-            onModelAdded = { modelName, fileUri, clipSkip ->                 showCustomModelDialog = false
+            onModelAdded = { modelName, fileUri, clipSkip ->
+                showCustomModelDialog = false
                 scope.launch {
                     convertCustomModel(
                         context = context,
                         modelName = modelName,
                         fileUri = fileUri,
-                        clipSkip = clipSkip,                         onProgress = { progress ->
+                        clipSkip = clipSkip, onProgress = { progress ->
                             conversionProgress = progress
                         },
                         onStart = {
@@ -714,7 +715,7 @@ fun ModelListScreen(
                     ),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                                        if (page == 0) {
+                    if (page == 0) {
                         item {
                             AddCustomModelButton(
                                 onClick = { showCustomModelDialog = true },
@@ -839,7 +840,7 @@ fun ModelListScreen(
         }
     }
 
-        if (isConverting) {
+    if (isConverting) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -1377,8 +1378,8 @@ private fun FileManagerDialog(
                                 }
                             }
                             onFileDeleted()
-                                                        selectedFolder?.let { loadFilesForFolder(it) }
-                                                        loadFolders()
+                            selectedFolder?.let { loadFilesForFolder(it) }
+                            loadFolders()
                         }
                         showDeleteConfirm = null
                     },
@@ -1443,7 +1444,7 @@ private fun FileManagerDialog(
                         )
                     }
                 } else if (selectedFolder == null) {
-                                        if (modelFolders.isEmpty()) {
+                    if (modelFolders.isEmpty()) {
                         Box(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
@@ -1531,7 +1532,7 @@ private fun FileManagerDialog(
                         }
                     }
                 } else {
-                                        if (folderFiles.isEmpty()) {
+                    if (folderFiles.isEmpty()) {
                         Box(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
@@ -1700,7 +1701,7 @@ fun CustomModelDialog(
                     placeholder = { Text(stringResource(R.string.custom_model_name_hint)) }
                 )
 
-                                Column(
+                Column(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -1759,7 +1760,8 @@ fun CustomModelDialog(
             TextButton(
                 onClick = {
                     if (modelName.isNotBlank() && selectedFileUri != null) {
-                        onModelAdded(modelName, selectedFileUri!!, clipSkip)                     }
+                        onModelAdded(modelName, selectedFileUri!!, clipSkip)
+                    }
                 },
                 enabled = modelName.isNotBlank() && selectedFileUri != null
             ) {
@@ -1778,7 +1780,7 @@ suspend fun convertCustomModel(
     context: Context,
     modelName: String,
     fileUri: Uri,
-    clipSkip: Int,     onProgress: (String) -> Unit,
+    clipSkip: Int, onProgress: (String) -> Unit,
     onStart: () -> Unit,
     onSuccess: () -> Unit,
     onError: (String) -> Unit
@@ -1789,9 +1791,9 @@ suspend fun convertCustomModel(
             onProgress(context.getString(R.string.preparing_model))
         }
 
-                val modelId = modelName.replace(" ", "")
+        val modelId = modelName.replace(" ", "")
 
-                val modelsDir = File(context.filesDir, "models")
+        val modelsDir = File(context.filesDir, "models")
         if (!modelsDir.exists()) {
             modelsDir.mkdirs()
         }
@@ -1806,7 +1808,7 @@ suspend fun convertCustomModel(
             onProgress(context.getString(R.string.copying_model_file))
         }
 
-                val inputStream = context.contentResolver.openInputStream(fileUri)
+        val inputStream = context.contentResolver.openInputStream(fileUri)
             ?: throw Exception("Cannot open selected file")
         val modelFile = File(modelDir, "model.safetensors")
 
@@ -1820,12 +1822,12 @@ suspend fun convertCustomModel(
             onProgress(context.getString(R.string.copying_base_files))
         }
 
-                fun copyAssetsRecursively(assetPath: String, targetDir: File) {
+        fun copyAssetsRecursively(assetPath: String, targetDir: File) {
             val assetManager = context.assets
             val assets = assetManager.list(assetPath) ?: emptyArray()
 
             if (assets.isEmpty()) {
-                                try {
+                try {
                     val assetInputStream = assetManager.open(assetPath)
                     val fileName = assetPath.substringAfterLast("/")
                     val targetFile = File(targetDir, fileName)
@@ -1836,15 +1838,15 @@ suspend fun convertCustomModel(
                         }
                     }
                 } catch (e: Exception) {
-                                        android.util.Log.w("ModelConvert", "Could not copy asset: $assetPath", e)
+                    android.util.Log.w("ModelConvert", "Could not copy asset: $assetPath", e)
                 }
             } else {
-                                for (asset in assets) {
+                for (asset in assets) {
                     val subAssetPath = "$assetPath/$asset"
                     val subAssets = assetManager.list(subAssetPath) ?: emptyArray()
 
                     if (subAssets.isEmpty()) {
-                                                try {
+                        try {
                             val assetInputStream = assetManager.open(subAssetPath)
                             val targetFile = File(targetDir, asset)
 
@@ -1861,7 +1863,7 @@ suspend fun convertCustomModel(
                             )
                         }
                     } else {
-                                                val subTargetDir = File(targetDir, asset)
+                        val subTargetDir = File(targetDir, asset)
                         subTargetDir.mkdirs()
                         copyAssetsRecursively(subAssetPath, subTargetDir)
                     }
@@ -1875,7 +1877,7 @@ suspend fun convertCustomModel(
             onProgress(context.getString(R.string.converting_model))
         }
 
-                val nativeDir = context.applicationInfo.nativeLibraryDir
+        val nativeDir = context.applicationInfo.nativeLibraryDir
         val executableFile = File(nativeDir, "libstable_diffusion_core.so")
 
         if (!executableFile.exists()) {
@@ -1887,7 +1889,8 @@ suspend fun convertCustomModel(
             "--convert",
             modelDir.absolutePath
         )
-        if (clipSkip == 2) {             command += listOf(
+        if (clipSkip == 2) {
+            command += listOf(
                 "--clip_skip_2"
             )
         }
@@ -1910,7 +1913,7 @@ suspend fun convertCustomModel(
 
         val process = processBuilder.start()
 
-                process.inputStream.bufferedReader().use { reader ->
+        process.inputStream.bufferedReader().use { reader ->
             var line: String?
             while (reader.readLine().also { line = it } != null) {
                 android.util.Log.i("ModelConvert", "Convert: $line")
@@ -1923,10 +1926,10 @@ suspend fun convertCustomModel(
         val exitCode = process.waitFor()
         android.util.Log.i("ModelConvert", "Conversion process exited with code: $exitCode")
 
-                val finishedFile = File(modelDir, "finished")
+        val finishedFile = File(modelDir, "finished")
         if (finishedFile.exists()) {
-                        modelFile.delete() 
-                        val clipSlimmedFile = File(modelDir, "clip.mnn.slimmed")
+            modelFile.delete()
+            val clipSlimmedFile = File(modelDir, "clip.mnn.slimmed")
             if (clipSlimmedFile.exists()) {
                 clipSlimmedFile.delete()
             }
@@ -1935,7 +1938,7 @@ suspend fun convertCustomModel(
                 onSuccess()
             }
         } else {
-                        modelDir.deleteRecursively()
+            modelDir.deleteRecursively()
             withContext(Dispatchers.Main) {
                 onError("Model conversion failed: Please use SD1.5 safetensors model")
             }
@@ -1944,7 +1947,7 @@ suspend fun convertCustomModel(
     } catch (e: Exception) {
         android.util.Log.e("ModelConvert", "Conversion failed", e)
 
-                val modelId = modelName.replace(" ", "")
+        val modelId = modelName.replace(" ", "")
         val modelDir = File(File(context.filesDir, "models"), modelId)
         if (modelDir.exists()) {
             modelDir.deleteRecursively()

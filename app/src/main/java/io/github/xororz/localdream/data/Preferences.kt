@@ -22,6 +22,7 @@ class GenerationPreferences(private val context: Context) {
     private fun getSizeKey(modelId: String) = intPreferencesKey("${modelId}_size")
     private fun getDenoiseStrengthKey(modelId: String) =
         floatPreferencesKey("${modelId}_denoise_strength")
+
     private fun getUseOpenCLKey(modelId: String) = booleanPreferencesKey("${modelId}_use_opencl")
 
     private val BASE_URL_KEY = stringPreferencesKey("base_url")
@@ -61,6 +62,7 @@ class GenerationPreferences(private val context: Context) {
             preferences[getUseOpenCLKey(modelId)] = useOpenCL
         }
     }
+
     suspend fun savePrompt(modelId: String, prompt: String) {
         context.dataStore.edit { preferences ->
             preferences[getPromptKey(modelId)] = prompt

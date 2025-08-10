@@ -113,7 +113,10 @@ class BackgroundGenerationService : Service() {
                 if (maskFile.exists()) {
                     maskFile.readText()
                 } else {
-                    android.util.Log.w("GenerationService", "has_mask is true but mask.txt not found")
+                    android.util.Log.w(
+                        "GenerationService",
+                        "has_mask is true but mask.txt not found"
+                    )
                     null
                 }
             } catch (e: Exception) {
@@ -134,7 +137,18 @@ class BackgroundGenerationService : Service() {
 
         serviceScope.launch {
             android.util.Log.d("GenerationService", "start generation")
-            runGeneration(prompt, negativePrompt, steps, cfg, seed, size, image, mask, denoiseStrength, useOpenCL)
+            runGeneration(
+                prompt,
+                negativePrompt,
+                steps,
+                cfg,
+                seed,
+                size,
+                image,
+                mask,
+                denoiseStrength,
+                useOpenCL
+            )
         }
 
         return START_NOT_STICKY
@@ -257,7 +271,8 @@ class BackgroundGenerationService : Service() {
                                         }
 
                                         "error" -> {
-                                            val errorMsg = message.optString("message", "unknown error")
+                                            val errorMsg =
+                                                message.optString("message", "unknown error")
                                             throw IOException(errorMsg)
                                         }
                                     }
