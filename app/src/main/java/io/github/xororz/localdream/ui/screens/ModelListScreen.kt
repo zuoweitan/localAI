@@ -1,6 +1,7 @@
 package io.github.xororz.localdream.ui.screens
 
 import android.content.Context
+import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -31,6 +32,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
+import androidx.compose.foundation.text.ClickableText
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextDecoration
 import io.github.xororz.localdream.R
 import kotlinx.coroutines.withTimeout
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -196,10 +204,49 @@ fun ModelListScreen(
                         .fillMaxWidth()
                         .padding(vertical = 8.dp)
                 ) {
-                    Text(
-                        text = stringResource(R.string.must_read),
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(bottom = 12.dp)
+                    val context = LocalContext.current
+                    val mustReadText = stringResource(R.string.must_read)
+                    val githubUrl = "https://github.com/xororz/local-dream"
+
+                    val annotatedString = buildAnnotatedString {
+                        val fullText = mustReadText
+                        append(fullText)
+
+                        val startIndex = fullText.indexOf(githubUrl)
+                        if (startIndex >= 0) {
+                            addStyle(
+                                style = SpanStyle(
+                                    color = MaterialTheme.colorScheme.primary,
+                                    textDecoration = TextDecoration.Underline
+                                ),
+                                start = startIndex,
+                                end = startIndex + githubUrl.length
+                            )
+                            addStringAnnotation(
+                                tag = "URL",
+                                annotation = githubUrl,
+                                start = startIndex,
+                                end = startIndex + githubUrl.length
+                            )
+                        }
+                    }
+
+                    ClickableText(
+                        text = annotatedString,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            color = MaterialTheme.colorScheme.onSurface
+                        ),
+                        modifier = Modifier.padding(bottom = 12.dp),
+                        onClick = { offset ->
+                            annotatedString.getStringAnnotations(
+                                tag = "URL",
+                                start = offset,
+                                end = offset
+                            ).firstOrNull()?.let { annotation ->
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(annotation.item))
+                                context.startActivity(intent)
+                            }
+                        }
                     )
                 }
             },

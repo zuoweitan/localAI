@@ -194,6 +194,10 @@ Custom seed support for reproducible image generation:
 - **[MoyuruAizawa/Cropify](https://github.com/MoyuruAizawa/Cropify)** - Image cropping
 - **AOSP, Material Design, Jetpack Compose** - UI framework
 
+### NSFW Detection Model
+
+- **[bhky/opennsfw2](https://github.com/bhky/opennsfw2)** - NSFW content filtering
+
 ---
 
 ## 💖 Support This Project
