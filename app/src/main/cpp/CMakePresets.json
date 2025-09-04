@@ -21,7 +21,7 @@
       },
       "toolchainFile": "$env{ANDROID_NDK_ROOT}/build/cmake/android.toolchain.cmake",
       "environment": {
-        "ANDROID_NDK_ROOT": "/data/android-ndk-r28"
+        "ANDROID_NDK_ROOT": "/Users/tanweiwei/Library/Android/sdk/ndk/android-ndk-r27"
       }
     },
     {

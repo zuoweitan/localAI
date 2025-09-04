@@ -1,0 +1,140 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 715f153..a3492f4 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -5,6 +5,20 @@ set(CMAKE_CXX_STANDARD 17)
+ set(CMAKE_CXX_STANDARD_REQUIRED ON)
+ set(CMAKE_CXX_EXTENSIONS OFF)
+ 
++# 定义 ANDROID_TOOLCHAIN_ROOT 变量，确保在 Android 构建中使用正确的路径
++if (CMAKE_SYSTEM_NAME STREQUAL "Android")
++  # 检查主项目是否定义了 ANDROID_TOOLCHAIN_ROOT
++  if (NOT DEFINED ANDROID_TOOLCHAIN_ROOT)
++    # 根据操作系统设置正确的 HOST_TAG
++    if (CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin")
++      set(HOST_TAG "darwin-x86_64")
++    else()
++      set(HOST_TAG "linux-x86_64")
++    endif()
++    set(ANDROID_TOOLCHAIN_ROOT ${CMAKE_ANDROID_NDK}/toolchains/llvm/prebuilt/${HOST_TAG})
++  endif()
++endif()
++
+ include(FetchContent)
+ 
+ # update to contain more rust flags
+@@ -45,6 +59,13 @@ elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+     )
+   endif()
+ elseif (CMAKE_SYSTEM_NAME STREQUAL "Android")
++  # 根据操作系统设置正确的 HOST_TAG
++  if (CMAKE_HOST_SYSTEM_NAME STREQUAL "Darwin")
++    set(HOST_TAG "darwin-x86_64")
++  else()
++    set(HOST_TAG "linux-x86_64")
++  endif()
++
+   if (ANDROID_ABI STREQUAL "arm64-v8a")
+     set(TOKENIZERS_CPP_CARGO_TARGET aarch64-linux-android)
+   elseif (ANDROID_ABI STREQUAL "armeabi-v7a")
+@@ -54,10 +75,13 @@ elseif (CMAKE_SYSTEM_NAME STREQUAL "Android")
+   elseif (ANDROID_ABI STREQUAL "x86")
+     set(TOKENIZERS_CPP_CARGO_TARGET i686-linux-android)
+   endif()
++
++  # 直接使用正确的路径而不是依赖 ANDROID_TOOLCHAIN_ROOT 变量
++  set(CORRECT_ANDROID_TOOLCHAIN_ROOT ${CMAKE_ANDROID_NDK}/toolchains/llvm/prebuilt/${HOST_TAG})
+   set(CARGO_EXTRA_ENVS
+-    AR_${TOKENIZERS_CPP_CARGO_TARGET}=${ANDROID_TOOLCHAIN_ROOT}/bin/llvm-ar
+-    CC_${TOKENIZERS_CPP_CARGO_TARGET}=${ANDROID_TOOLCHAIN_ROOT}/bin/${TOKENIZERS_CPP_CARGO_TARGET}${ANDROID_NATIVE_API_LEVEL}-clang
+-    CXX_${TOKENIZERS_CPP_CARGO_TARGET}=${ANDROID_TOOLCHAIN_ROOT}/bin/${TOKENIZERS_CPP_CARGO_TARGET}${ANDROID_NATIVE_API_LEVEL}-clang++
++    AR_${TOKENIZERS_CPP_CARGO_TARGET}=${CORRECT_ANDROID_TOOLCHAIN_ROOT}/bin/llvm-ar
++    CC_${TOKENIZERS_CPP_CARGO_TARGET}=${CORRECT_ANDROID_TOOLCHAIN_ROOT}/bin/${TOKENIZERS_CPP_CARGO_TARGET}${ANDROID_NATIVE_API_LEVEL}-clang
++    CXX_${TOKENIZERS_CPP_CARGO_TARGET}=${CORRECT_ANDROID_TOOLCHAIN_ROOT}/bin/${TOKENIZERS_CPP_CARGO_TARGET}${ANDROID_NATIVE_API_LEVEL}-clang++
+   )
+ elseif (CMAKE_SYSTEM_NAME STREQUAL "Windows")
+   set(TOKENIZERS_CPP_CARGO_TARGET x86_64-pc-windows-msvc)
+@@ -151,4 +175,4 @@ target_link_libraries(tokenizers_c INTERFACE ${TOKENIZERS_RUST_LIB} ${TOKENIZERS
+ 
+ add_library(tokenizers_cpp STATIC $<TARGET_OBJECTS:tokenizer_cpp_objs>)
+ target_link_libraries(tokenizers_cpp PRIVATE tokenizers_c sentencepiece-static ${TOKENIZERS_CPP_LINK_LIBS})
+-target_include_directories(tokenizers_cpp PUBLIC ${TOKENIZERS_CPP_INCLUDE})
++target_include_directories(tokenizers_cpp PUBLIC ${TOKENIZERS_CPP_INCLUDE})
+\ No newline at end of file
+diff --git a/rust/Cargo.toml b/rust/Cargo.toml
+index f875fac..1f16a5f 100644
+--- a/rust/Cargo.toml
++++ b/rust/Cargo.toml
+@@ -1,3 +1,4 @@
++## Here's my code: 
+ [package]
+ name = "tokenizers-c"
+ version = "0.1.0"
+@@ -7,7 +8,7 @@ edition = "2018"
+ crate-type = ["staticlib"]
+ 
+ [dependencies]
+-
++ahash = "0.8"
+ tokenizers = { version = "0.21.0", default-features = false, features = ["onig"] }
+ serde = { version = "1.0", features = [ "derive" ] }
+-serde_json = "1.0"
++serde_json = "1.0"
+\ No newline at end of file
+diff --git a/rust/src/lib.rs b/rust/src/lib.rs
+index e8c94a3..26c71b6 100644
+--- a/rust/src/lib.rs
++++ b/rust/src/lib.rs
+@@ -1,6 +1,8 @@
+ // A simple C wrapper of tokenzier library
+ use serde_json::Value;
+-use std::{collections::HashMap, str::FromStr};
++use std::str::FromStr;
++use std::collections::HashMap;
++use ahash::AHashMap;
+ use tokenizers::models::bpe::BPE;
+ use tokenizers::pre_tokenizers::byte_level::ByteLevel;
+ use tokenizers::tokenizer::Tokenizer;
+@@ -11,7 +13,7 @@ pub struct TokenizerWrapper {
+     id_to_token_result: String,
+ }
+ 
+-pub type Vocab = HashMap<String, u32>;
++pub type Vocab = AHashMap<String, u32>;
+ pub type Merges = Vec<(String, String)>;
+ 
+ #[repr(C)]
+@@ -36,7 +38,7 @@ impl TokenizerWrapper {
+     ) -> TokenizerWrapper {
+         let vocab_json: Value = serde_json::from_str(vocab).unwrap();
+         let added_tokens_json: Value = serde_json::from_str(added_tokens).unwrap();
+-        let mut vocab = HashMap::new();
++        let mut vocab = AHashMap::new();
+         match vocab_json {
+             Value::Object(m) => {
+                 for (token, id) in m {
+@@ -215,7 +217,7 @@ extern "C" fn tokenizers_get_decode_str(
+ ) {
+     unsafe {
+         *out_cstr = (*handle).decode_str.as_mut_ptr();
+-        *out_len = (*handle).decode_str.len();
++        *out_len = (&(*handle).decode_str).len();
+     }
+ }
+ 
+@@ -248,7 +250,7 @@ extern "C" fn tokenizers_id_to_token(
+         };
+ 
+         *out_cstr = (*handle).id_to_token_result.as_mut_ptr();
+-        *out_len = (*handle).id_to_token_result.len();
++        *out_len = (&(*handle).id_to_token_result).len();
+     }
+ }
+ 
+@@ -267,4 +269,4 @@ extern "C" fn tokenizers_token_to_id(
+             None => -1,
+         };
+     }
+-}
++}
+\ No newline at end of file
